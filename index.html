@@ -615,8 +615,6 @@ function renderHome(){
   const totalGasto=gastos.reduce((a,b)=>a+b.valor,0)
   const hoje=new Date().getDate()
   const tb=todosBoletos()
-  const pendentes=tb.filter(b=>!boletosPagos.includes(b.id)&&b.venc-hoje>=0&&b.venc-hoje<=5)
-
   let html=`<div style="text-align:center;padding:24px 0 20px">
     <div style="font-size:48px;margin-bottom:6px">💸</div>
     <div style="font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px">${getSaudacao()}, ${usuario==='fred'?'Fred':'Mya'}!</div>
@@ -650,16 +648,6 @@ function renderHome(){
     <input class="obs-input" type="text" id="inp-obs" placeholder="ex: tênis, mercado, jantar…" />
     <button class="btn-main btn-off" id="btn-lancar" onclick="lancar()">Registrar gasto</button>
   </div>`
-
-  if(pendentes.length){
-    html+=`<div class="alerta">
-      <div class="al-title"><i class="ti ti-bell" aria-hidden="true"></i> Vencendo em breve</div>`
-    pendentes.forEach(b=>{
-      const d=b.venc-hoje
-      html+=`<div class="al-row"><span>${b.nome}</span><span>${d===0?'Vence hoje!':'Em '+d+'d'} · ${fmt(b.valor)}</span></div>`
-    })
-    html+=`</div>`
-  }
 
   el.innerHTML=html
   // reinit tipo e cat depois de renderizar
