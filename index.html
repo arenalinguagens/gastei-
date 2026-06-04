@@ -254,6 +254,10 @@
   <div class="modal-box">
     <div class="modal-title" id="modal-titulo">Editar boleto</div>
     <div class="modal-field">
+      <div class="modal-field-label">Nome do boleto</div>
+      <input class="modal-input" type="text" id="modal-inp-nome" placeholder="ex: Energia, Internet…" style="font-size:18px" />
+    </div>
+    <div class="modal-field">
       <div class="modal-field-label">Valor (R$)</div>
       <input class="modal-input" type="number" id="modal-inp-valor" inputmode="decimal" step="0.01" placeholder="0,00" />
     </div>
@@ -327,6 +331,7 @@ const CATS = [
   {id:'rua', icon:'ti ti-tools-kitchen-2',label:'Lanche na rua', limite:1000, color:'#EF9F27'},
   {id:'farm',icon:'ti ti-pill',           label:'Farmácia',      limite:500,  color:'#D4537E'},
   {id:'shop',icon:'ti ti-shopping-bag',   label:'Shopee/Compras',limite:600,  color:'#7F77DD'},
+  {id:'uber',icon:'ti ti-car',             label:'Uber',          limite:300,  color:'#1C2A38'},
   {id:'out', icon:'ti ti-dots',           label:'Outros',        limite:800,  color:'#888780'},
 ]
 const GRUPOS_BASE = [
@@ -354,7 +359,7 @@ const GRUPOS_BASE = [
 const LIMITE_VAR = CATS.reduce((a,b)=>a+b.limite,0)
 
 // ── ESTADO ─────────────────────────────────────────
-let gastos=[], boletosPagos=[], boletoValores={}, boletoVencimentos={}, gruposCollapsed={}
+let gastos=[], boletosPagos=[], boletoValores={}, boletoVencimentos={}, boletoNomes={}, gruposCollapsed={}
 let usuario=null, catSel=null, tipoLanc='normal', numParcelas=2, histFiltro='todos', mesOffset=0
 let editBoletoId=null
 
@@ -471,11 +476,12 @@ window.toggleGrupo=async function(id){
 // ── MODAL BOLETO ───────────────────────────────────
 window.abrirModal=function(id,nome,val,venc){
   editBoletoId=id
-  document.getElementById('modal-titulo').textContent='Editar: '+nome
+  document.getElementById('modal-titulo').textContent='Editar boleto'
+  document.getElementById('modal-inp-nome').value=nome
   document.getElementById('modal-inp-valor').value=val
   document.getElementById('modal-venc-num').textContent=venc||10
   document.getElementById('modal-boleto').classList.remove('hide')
-  setTimeout(()=>document.getElementById('modal-inp-valor').focus(),100)
+  setTimeout(()=>document.getElementById('modal-inp-nome').focus(),100)
 }
 window.mudaVenc=function(d){
   const el=document.getElementById('modal-venc-num')
@@ -484,13 +490,16 @@ window.mudaVenc=function(d){
 }
 window.fecharModal=function(){document.getElementById('modal-boleto').classList.add('hide');editBoletoId=null}
 window.salvarModal=function(){
+  const n=document.getElementById('modal-inp-nome').value.trim()
   const v=parseFloat(document.getElementById('modal-inp-valor').value)
   const d=parseInt(document.getElementById('modal-venc-num').textContent)
   if(!editBoletoId){fecharModal();return}
+  if(n) boletoNomes[editBoletoId]=n
   if(!isNaN(v)&&v>0) boletoValores[editBoletoId]=v
   if(!isNaN(d)&&d>=1&&d<=31) boletoVencimentos[editBoletoId]=d
   localStorage.setItem('boletoValores',JSON.stringify(boletoValores))
   localStorage.setItem('boletoVencimentos',JSON.stringify(boletoVencimentos))
+  localStorage.setItem('boletoNomes',JSON.stringify(boletoNomes))
   fecharModal();renderFixos();renderControle();renderHome();toast('✅ Boleto atualizado!')
 }
 
@@ -869,6 +878,7 @@ async function init(){
   gruposCollapsed=JSON.parse(localStorage.getItem('gruposCollapsed')||'{}')
   boletoValores=JSON.parse(localStorage.getItem('boletoValores')||'{}')
   boletoVencimentos=JSON.parse(localStorage.getItem('boletoVencimentos')||'{}')
+  boletoNomes=JSON.parse(localStorage.getItem('boletoNomes')||'{}')
   try{await Promise.all([carregarGastos(),carregarBoletos()])}catch{}
   atualizarTotaisLogin()
   const u=localStorage.getItem('gastei_usuario')
