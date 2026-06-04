@@ -163,6 +163,11 @@
     .tipo-btn.on.mya{border-color:var(--mya);background:var(--mya-l);color:var(--mya-d)}
     .parcelas-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
     .parcelas-label{font-size:13px;color:var(--text2);white-space:nowrap}
+    .parc-opcoes{display:flex;gap:8px;margin-bottom:12px}
+    .parc-opcao{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:var(--rs);background:var(--surface);cursor:pointer;font-size:12px;font-weight:500;color:var(--text2);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+    .parc-opcao.on.fred{border-color:var(--fred);background:var(--fred-l);color:var(--fred-d)}
+    .parc-opcao.on.mya{border-color:var(--mya);background:var(--mya-l);color:var(--mya-d)}
+    .parc-opcao.on{border-color:var(--fred);background:var(--fred-l);color:var(--fred-d)}
     .parc-ctrl{display:flex;align-items:center;gap:10px}
     .parc-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text)}
     .parc-num{font-size:18px;font-weight:600;min-width:22px;text-align:center}
@@ -197,6 +202,15 @@
     .badge-f{background:var(--fred-l);color:var(--fred-d)}.badge-m{background:var(--mya-l);color:var(--mya-d)}.badge-p{background:#F0ECF9;color:#5B3FA6}
     .del-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;padding:4px;border-radius:4px}
     .del-btn:active{color:var(--err)}
+    /* Modo config boletos */
+    .config-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--fred-l);border-radius:var(--r);margin-bottom:10px;border:0.5px solid var(--fred)}
+    .config-bar-txt{font-size:13px;font-weight:600;color:var(--fred-d)}
+    .config-bar-btn{font-size:12px;font-weight:600;color:var(--fred-d);background:none;border:1px solid var(--fred);border-radius:6px;padding:4px 10px;cursor:pointer}
+    .b-del{background:none;border:none;cursor:pointer;color:var(--err);font-size:16px;padding:3px 5px;border-radius:4px;transition:opacity .15s}
+    .b-del:active{opacity:.6}
+    /* Modal novo boleto */
+    .modal-select{width:100%;font-size:14px;border:1px solid var(--border);border-radius:var(--rs);background:var(--bg);color:var(--text);padding:9px 12px;outline:none;margin-bottom:0}
+    .modal-select:focus{border-color:var(--fred)}
     .empty{text-align:center;color:var(--text2);font-size:13px;padding:2rem 0}
 
     /* MODAL */
@@ -237,7 +251,7 @@
 <div id="tela-login">
   <div class="login-logo">💸</div>
   <div class="login-title">Gastei!</div>
-  <div class="login-sub">Controle financeiro do Fred e da Mya</div>
+  <div class="login-sub">Controle financeiro</div>
   <div class="login-pergunta">Quem é você?</div>
   <div class="login-opcoes">
     <div class="login-btn fred" onclick="entrar('fred')">
@@ -266,12 +280,8 @@
       <input class="modal-input" type="number" id="modal-inp-valor" inputmode="decimal" step="0.01" placeholder="0,00" />
     </div>
     <div class="modal-field">
-      <div class="modal-field-label">Dia do vencimento</div>
-      <div class="modal-venc-ctrl">
-        <button class="parc-btn" onclick="mudaVenc(-1)">−</button>
-        <span class="modal-venc-num" id="modal-venc-num">10</span>
-        <button class="parc-btn" onclick="mudaVenc(1)">+</button>
-      </div>
+      <div class="modal-field-label">Dia do vencimento (1–31)</div>
+      <input class="modal-input" type="number" id="modal-venc-num" inputmode="numeric" min="1" max="31" placeholder="ex: 10" style="font-size:22px;text-align:center" />
     </div>
     <div class="modal-btns">
       <button class="modal-btn cancel" onclick="fecharModal()">Cancelar</button>
@@ -280,6 +290,7 @@
   </div>
 </div>
 
+<!-- MODAL NOVO BOLETO -->
 <!-- APP -->
 <div id="app">
   <header class="hdr">
@@ -370,6 +381,9 @@ let gastos=[], boletosPagos=[], boletoValores={}, boletoVencimentos={}, boletoNo
 let ocultarValores=false
 let usuario=null, catSel=null, tipoLanc='normal', numParcelas=2, histFiltro='todos', mesOffset=0
 let editBoletoId=null
+let modoConfigBoletos=false
+let mostrarFormNovoBoleto=false
+let boletosExtras=[]   // boletos criados pelo usuário
 
 // ── MÊS ────────────────────────────────────────────
 function calcMes(off=0){
@@ -414,7 +428,20 @@ function toast(msg){
   setTimeout(()=>el.classList.remove('show'),2500)
 }
 function hideLoading(){const el=document.getElementById('loading');if(!el)return;el.classList.add('hide');setTimeout(()=>el.remove(),400)}
-function grupos(){return GRUPOS_BASE.map(g=>({...g,boletos:g.boletos.map(b=>({...b,nome:boletoNomes[b.id]??b.nome,valor:boletoValores[b.id]??b.valorPadrao,venc:boletoVencimentos[b.id]??b.venc}))}))}
+function grupos(){
+  const base=GRUPOS_BASE.map(g=>({
+    ...g,
+    boletos:g.boletos.map(b=>({...b,nome:boletoNomes[b.id]??b.nome,valor:boletoValores[b.id]??b.valorPadrao,venc:boletoVencimentos[b.id]??b.venc}))
+  }))
+  // injeta boletos extras em seus grupos
+  boletosExtras.forEach(ex=>{
+    const gr=base.find(g=>g.id===ex.grupo)
+    if(gr) gr.boletos.push({...ex,nome:boletoNomes[ex.id]??ex.nome,valor:boletoValores[ex.id]??ex.valorPadrao,venc:boletoVencimentos[ex.id]??ex.venc,_extra:true})
+  })
+  // ordena boletos alfabeticamente em cada grupo
+  base.forEach(g=>g.boletos.sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')))
+  return base
+}
 function todosBoletos(){return grupos().flatMap(g=>g.boletos)}
 
 // ── IDENTIFICAÇÃO ──────────────────────────────────
@@ -486,6 +513,42 @@ window.toggleBoleto=async function(id){
   localStorage.setItem('boletosPagos_v3',JSON.stringify(boletosPagos))
   renderFixos();renderDash()
 }
+window.toggleConfigBoletos=function(){
+  modoConfigBoletos=!modoConfigBoletos
+  renderFixos()
+}
+
+window.excluirBoletoExtra=function(id){
+  if(!confirm('Excluir este boleto?'))return
+  boletosExtras=boletosExtras.filter(b=>b.id!==id)
+  localStorage.setItem('boletosExtras',JSON.stringify(boletosExtras))
+  renderFixos();renderControle();toast('🗑 Boleto removido')
+}
+
+window.abrirModalNovoBoleto=function(){
+  mostrarFormNovoBoleto=true
+  renderFixos()
+  setTimeout(()=>{const el=document.getElementById('nb-nome');if(el)el.focus()},100)
+}
+window.fecharModalNovoBoleto=function(){
+  mostrarFormNovoBoleto=false
+  renderFixos()
+}
+window.mudaVencNovo=function(d){/* replaced by input */}
+window.salvarNovoBoleto=function(){
+  const nome=document.getElementById('nb-nome').value.trim()
+  const valor=parseFloat(document.getElementById('nb-valor').value)
+  const venc=parseInt(document.getElementById('nb-venc').value)
+  const grupo=document.getElementById('nb-grupo').value
+  if(!nome||isNaN(valor)||valor<=0){toast('⚠️ Preencha nome e valor');return}
+  if(isNaN(venc)||venc<1||venc>31){toast('⚠️ Dia inválido (1–31)');return}
+  const novo={id:'extra_'+Date.now(),nome,valorPadrao:valor,venc,grupo,_extra:true}
+  boletosExtras.push(novo)
+  localStorage.setItem('boletosExtras',JSON.stringify(boletosExtras))
+  mostrarFormNovoBoleto=false
+  renderFixos();renderControle();toast('✅ Boleto adicionado!')
+}
+
 window.toggleGrupo=async function(id){
   gruposCollapsed[id]=!gruposCollapsed[id]
   localStorage.setItem('gruposCollapsed',JSON.stringify(gruposCollapsed))
@@ -498,20 +561,16 @@ window.abrirModal=function(id,nome,val,venc){
   document.getElementById('modal-titulo').textContent='Editar boleto'
   document.getElementById('modal-inp-nome').value=nome
   document.getElementById('modal-inp-valor').value=val
-  document.getElementById('modal-venc-num').textContent=venc||10
+  document.getElementById('modal-venc-num').value=venc||10
   document.getElementById('modal-boleto').classList.remove('hide')
   setTimeout(()=>document.getElementById('modal-inp-nome').focus(),100)
 }
-window.mudaVenc=function(d){
-  const el=document.getElementById('modal-venc-num')
-  const v=Math.max(1,Math.min(31,parseInt(el.textContent)+d))
-  el.textContent=v
-}
+window.mudaVenc=function(d){/* replaced by input */}
 window.fecharModal=function(){document.getElementById('modal-boleto').classList.add('hide');editBoletoId=null}
 window.salvarModal=function(){
   const n=document.getElementById('modal-inp-nome').value.trim()
   const v=parseFloat(document.getElementById('modal-inp-valor').value)
-  const d=parseInt(document.getElementById('modal-venc-num').textContent)
+  const d=parseInt(document.getElementById('modal-venc-num').value)
   if(!editBoletoId){fecharModal();return}
   if(n) boletoNomes[editBoletoId]=n
   if(!isNaN(v)&&v>0) boletoValores[editBoletoId]=v
@@ -544,6 +603,27 @@ window.selTipo=function(t){
   const p=usuario||'fred'
   document.getElementById('tipo-normal').className='tipo-btn'+(t==='normal'?' on '+p:'')
   document.getElementById('tipo-cartao').className='tipo-btn'+(t==='cartao'?' on '+p:'')
+  if(t==='cartao') selParc(1)  // default: 1x ao abrir
+  atualizaParcelaInfo()
+}
+window.selParc=function(modo){
+  // modo 1 = à vista no cartão (1x), modo 0 = parcelado
+  const ctrl=document.getElementById('parc-ctrl-area')
+  const btn1x=document.getElementById('parc-1x')
+  const btnNx=document.getElementById('parc-nx')
+  const p=usuario||'fred'
+  if(modo===1){
+    numParcelas=1
+    ctrl.style.display='none'
+    btn1x.className='parc-opcao on '+p
+    btnNx.className='parc-opcao'
+  } else {
+    numParcelas=numParcelas<2?2:numParcelas
+    document.getElementById('parc-num').textContent=numParcelas
+    ctrl.style.display='block'
+    btn1x.className='parc-opcao'
+    btnNx.className='parc-opcao on '+p
+  }
   atualizaParcelaInfo()
 }
 window.mudaParcelas=function(d){
@@ -554,7 +634,9 @@ window.mudaParcelas=function(d){
 window.atualizaParcelaInfo=function(){
   if(tipoLanc!=='cartao')return
   const v=parseFloat(document.getElementById('inp-valor').value)||0
-  document.getElementById('parc-info').textContent=v>0?`Parcela mensal: ${fmt(v/numParcelas)}`:''
+  const info=document.getElementById('parc-info');if(!info)return
+  if(numParcelas===1) info.textContent=v>0?`Debitado no cartão: ${fmt(v)}`:''
+  else info.textContent=v>0?`${numParcelas}x de ${fmt(v/numParcelas)}`:''
 }
 function atualizarBotao(){
   const btn=document.getElementById('btn-lancar');if(!btn)return
@@ -593,12 +675,40 @@ window.lancar=async function(){
   if(!usuario||!catSel||!vTotal||vTotal<=0)return
   const hoje=new Date().toLocaleDateString('pt-BR')
   const novos=[]
-  if(tipoLanc==='cartao'&&numParcelas>1){
+  if(tipoLanc==='cartao'){
     const[ano,mes]=mesAtual().split('-').map(Number)
-    for(let i=0;i<numParcelas;i++){
-      const ref=new Date(ano,mes-1+i,1)
+    const valorParc=numParcelas>1?parseFloat((vTotal/numParcelas).toFixed(2)):vTotal
+    const totalParc=numParcelas>1?numParcelas:1
+
+    // 1. Lançamento imediato no mês atual — representa o impacto real do gasto hoje
+    const idGrupo=crypto.randomUUID().slice(0,8)  // id de grupo para ligar as parcelas
+    novos.push({
+      id:crypto.randomUUID(),
+      pessoa:usuario,cat:catSel,
+      valor:vTotal,
+      obs:(obs?obs+' — ':'')+(numParcelas>1?`Cartão ${numParcelas}x (débito futuro)`:'Cartão 1x (débito futuro)'),
+      mes:mesAtual(),
+      data:hoje,
+      tipo:'cartao_registro',   // aparece no mês atual como gasto real
+      grupo_cartao:idGrupo,
+      created_at:new Date().toISOString()
+    })
+
+    // 2. Parcelas nos meses futuros (a partir do próximo mês)
+    for(let i=0;i<totalParc;i++){
+      const ref=new Date(ano,mes+i,1)  // começa no MÊS SEGUINTE (mes+i, não mes-1+i)
       const mesParc=`${ref.getFullYear()}-${String(ref.getMonth()+1).padStart(2,'0')}`
-      novos.push({id:crypto.randomUUID(),pessoa:usuario,cat:catSel,valor:parseFloat((vTotal/numParcelas).toFixed(2)),obs:obs+` (${i+1}/${numParcelas})`,mes:mesParc,data:hoje,tipo:'cartao',created_at:new Date().toISOString()})
+      novos.push({
+        id:crypto.randomUUID(),
+        pessoa:usuario,cat:catSel,
+        valor:valorParc,
+        obs:(obs?obs+' — ':'')+(numParcelas>1?`Fatura ${i+1}/${totalParc}`:'Fatura cartão'),
+        mes:mesParc,
+        data:hoje,
+        tipo:'cartao_fatura',   // aparece nos meses futuros como fatura
+        grupo_cartao:idGrupo,
+        created_at:new Date().toISOString()
+      })
     }
   }else{
     novos.push({id:crypto.randomUUID(),pessoa:usuario,cat:catSel,valor:vTotal,obs,mes:mesAtual(),data:hoje,tipo:'normal',created_at:new Date().toISOString()})
@@ -612,7 +722,7 @@ window.lancar=async function(){
   renderAll()
   try{
     const{error}=await sb.from('gastos').insert(novos);if(error)throw error
-    toast(tipoLanc==='cartao'&&numParcelas>1?`✅ ${numParcelas}x de ${fmt(vTotal/numParcelas)} lançadas!`:'✅ Gasto registrado!')
+    toast(tipoLanc==='cartao'?(numParcelas>1?`✅ ${numParcelas}x de ${fmt(vTotal/numParcelas)} — fatura a partir do próximo mês`:'✅ Cartão 1x — fatura no próximo mês'):'✅ Gasto registrado!')
   }catch{toast('⚠️ Salvo localmente')}
   goPage('dash')
 }
@@ -637,15 +747,21 @@ function renderHome(){
     <p class="sec-label">Tipo de pagamento</p>
     <div class="tipo-toggle">
       <button class="tipo-btn" id="tipo-normal" onclick="selTipo('normal')"><i class="ti ti-cash" aria-hidden="true"></i> À vista</button>
-      <button class="tipo-btn" id="tipo-cartao" onclick="selTipo('cartao')"><i class="ti ti-credit-card" aria-hidden="true"></i> Cartão parcelado</button>
+      <button class="tipo-btn" id="tipo-cartao" onclick="selTipo('cartao')"><i class="ti ti-credit-card" aria-hidden="true"></i> Cartão</button>
     </div>
     <div id="parcelas-area" style="display:none">
-      <div class="parcelas-row">
-        <span class="parcelas-label">Parcelas:</span>
-        <div class="parc-ctrl">
-          <button class="parc-btn" onclick="mudaParcelas(-1)">−</button>
-          <span class="parc-num" id="parc-num">2</span>
-          <button class="parc-btn" onclick="mudaParcelas(1)">+</button>
+      <div class="parc-opcoes">
+        <button class="parc-opcao on" id="parc-1x" onclick="selParc(1)"><i class="ti ti-check" aria-hidden="true"></i> 1x</button>
+        <button class="parc-opcao" id="parc-nx" onclick="selParc(0)"><i class="ti ti-list-numbers" aria-hidden="true"></i> Parcelado</button>
+      </div>
+      <div id="parc-ctrl-area" style="display:none">
+        <div class="parcelas-row">
+          <span class="parcelas-label">Quantas vezes?</span>
+          <div class="parc-ctrl">
+            <button class="parc-btn" onclick="mudaParcelas(-1)">−</button>
+            <span class="parc-num" id="parc-num">2</span>
+            <button class="parc-btn" onclick="mudaParcelas(1)">+</button>
+          </div>
         </div>
       </div>
       <div class="parc-info" id="parc-info"></div>
@@ -776,10 +892,54 @@ function renderFixos(){
   const tb=todosBoletos()
   const totalGeral=tb.reduce((a,b)=>a+b.valor,0)
   const totalPago=tb.filter(b=>boletosPagos.includes(b.id)).reduce((a,b)=>a+b.valor,0)
-  let html=`<div class="metric-grid">
-    <div class="metric"><div class="metric-l">Total de boletos</div><div class="metric-v">${fmtV(totalGeral)}</div></div>
-    <div class="metric"><div class="metric-l">Pago até agora</div><div class="metric-v ok">${fmtV(totalPago)}</div></div>
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="display:flex;gap:8px;flex:1">
+      <div class="metric" style="flex:1"><div class="metric-l">Total</div><div class="metric-v">${fmtV(totalGeral)}</div></div>
+      <div class="metric" style="flex:1"><div class="metric-l">Pago</div><div class="metric-v ok">${fmtV(totalPago)}</div></div>
+    </div>
+    <button onclick="toggleConfigBoletos()" style="margin-left:10px;background:${modoConfigBoletos?'var(--fred)':'var(--bg)'};border:1px solid ${modoConfigBoletos?'var(--fred)':'var(--border)'};color:${modoConfigBoletos?'#fff':'var(--text2)'};border-radius:var(--rs);padding:8px 12px;cursor:pointer;font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px;white-space:nowrap">
+      <i class="ti ti-settings" aria-hidden="true"></i>${modoConfigBoletos?'Concluir':'Editar'}
+    </button>
   </div>`
+  if(modoConfigBoletos){
+    html+=`<div class="config-bar">
+      <span class="config-bar-txt"><i class="ti ti-pencil" aria-hidden="true"></i> Modo edição — toque 🗑 para excluir</span>
+      <button class="config-bar-btn" onclick="abrirModalNovoBoleto()"><i class="ti ti-plus" aria-hidden="true"></i> Novo</button>
+    </div>`
+    if(mostrarFormNovoBoleto){
+      html+=`<div class="card" style="border:1.5px solid var(--fred);margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <span style="font-size:14px;font-weight:600">Novo boleto</span>
+          <button onclick="fecharModalNovoBoleto()" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px"><i class="ti ti-x" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-field">
+          <div class="modal-field-label">Nome</div>
+          <input class="obs-input" type="text" id="nb-nome" placeholder="ex: Academia, Streaming…" style="width:100%;margin-bottom:0" />
+        </div>
+        <div class="modal-field" style="margin-top:10px">
+          <div class="modal-field-label">Valor (R$)</div>
+          <input class="obs-input" type="number" id="nb-valor" inputmode="decimal" step="0.01" placeholder="0,00" style="width:100%;margin-bottom:0" />
+        </div>
+        <div class="modal-field" style="margin-top:10px">
+          <div class="modal-field-label">Dia do vencimento (1–31)</div>
+          <input class="obs-input" type="number" id="nb-venc" inputmode="numeric" min="1" max="31" placeholder="ex: 10" style="width:100%;margin-bottom:0;text-align:center" />
+        </div>
+        <div class="modal-field" style="margin-top:10px">
+          <div class="modal-field-label">Grupo</div>
+          <select class="modal-select" id="nb-grupo" style="margin-bottom:0">
+            <option value="casa">Casa</option>
+            <option value="pessoas">Pessoas</option>
+            <option value="impostos">Impostos</option>
+            <option value="outros">Outros</option>
+          </select>
+        </div>
+        <div class="modal-btns" style="margin-top:14px">
+          <button class="modal-btn cancel" onclick="fecharModalNovoBoleto()">Cancelar</button>
+          <button class="modal-btn confirm" onclick="salvarNovoBoleto()">Adicionar</button>
+        </div>
+      </div>`
+    }
+  }
   grupos().forEach(gr=>{
     const collapsed=gruposCollapsed[gr.id]
     const pagos=gr.boletos.filter(b=>boletosPagos.includes(b.id)).length
@@ -811,7 +971,8 @@ function renderFixos(){
           </div>
           <div class="b-right">
             <div class="b-val">${fmtV(b.valor)}</div>
-            <button class="edit-btn" onclick="abrirModal('${b.id}','${b.nome}',${b.valor},${b.venc})" aria-label="Editar valor"><i class="ti ti-pencil" aria-hidden="true"></i></button>
+            ${modoConfigBoletos&&b._extra?`<button class="b-del" onclick="excluirBoletoExtra('${b.id}')" aria-label="Excluir"><i class="ti ti-trash" aria-hidden="true"></i></button>`:''}
+            <button class="edit-btn" onclick="abrirModal('${b.id}','${b.nome}',${b.valor},${b.venc})" aria-label="Editar"><i class="ti ti-pencil" aria-hidden="true"></i></button>
           </div>
         </div>`
       })
@@ -839,7 +1000,10 @@ function renderHist(){
   </div><div class="card">`
   sorted.forEach(g=>{
     const c=CATS.find(x=>x.id===g.cat)||{icon:'ti ti-dots',label:'Outros',color:'#888'}
-    const isFred=g.pessoa==='fred',isParc=g.tipo==='cartao'
+    const isFred=g.pessoa==='fred'
+    const isParc=g.tipo==='cartao_registro'||g.tipo==='cartao_fatura'
+    const isRegistro=g.tipo==='cartao_registro'
+    const isFatura=g.tipo==='cartao_fatura'
     html+=`<div class="lanc-row">
       <div style="display:flex;align-items:center;gap:8px">
         <i class="${c.icon}" style="font-size:15px;color:${c.color}" aria-hidden="true"></i>
@@ -847,7 +1011,7 @@ function renderHist(){
           <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;flex-wrap:wrap">
             <span style="font-size:12px;font-weight:500">${c.label}</span>
             <span class="badge ${isFred?'badge-f':'badge-m'}">${isFred?'Fred':'Mya'}</span>
-            ${isParc?'<span class="badge badge-p"><i class="ti ti-credit-card" style="font-size:9px" aria-hidden="true"></i> Cartão</span>':''}
+            ${isRegistro?'<span class="badge badge-p"><i class="ti ti-credit-card" style="font-size:9px" aria-hidden="true"></i> Cartão</span>':''}${isFatura?'<span class="badge" style="background:#F0ECF9;color:#5B3FA6"><i class="ti ti-receipt" style="font-size:9px" aria-hidden="true"></i> Fatura</span>':''}
           </div>
           <div style="font-size:10px;color:var(--text2)">${g.data}${g.obs?' · '+g.obs:''}</div>
         </div>
@@ -878,6 +1042,7 @@ async function init(){
   boletoValores=JSON.parse(localStorage.getItem('boletoValores')||'{}')
   boletoVencimentos=JSON.parse(localStorage.getItem('boletoVencimentos')||'{}')
   boletoNomes=JSON.parse(localStorage.getItem('boletoNomes')||'{}')
+  boletosExtras=JSON.parse(localStorage.getItem('boletosExtras')||'[]')
   ocultarValores=localStorage.getItem('gastei_ocultar')==='1'
   const eyeBtn=document.getElementById('eye-btn')
   const eyeIco=document.getElementById('eye-icon')
