@@ -212,6 +212,10 @@
     .modal-btns{display:flex;gap:8px}
     .modal-btn{flex:1;padding:12px;border:none;border-radius:var(--rs);font-size:13px;font-weight:600;cursor:pointer}
     .modal-btn.cancel{background:var(--bg);color:var(--text2)}.modal-btn.confirm{background:var(--fred);color:#fff}
+    .eye-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:16px;padding:4px 6px;border-radius:6px;line-height:1;transition:color .15s}
+    .eye-btn:active{color:var(--fred)}
+    .eye-btn.oculto{color:var(--fred)}
+    .valor-oculto{filter:blur(6px);user-select:none;transition:filter .2s}
 
     /* LOADING */
     #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;transition:opacity .3s}
@@ -283,10 +287,13 @@
       <div class="hdr-left">
         <div class="hdr-sub">Controle financeiro do Fred e da Mya</div>
       </div>
-      <div class="usuario-chip" onclick="trocarUsuario()" id="usuario-chip" title="Trocar usuário">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="eye-btn" id="eye-btn" onclick="toggleOcultar()" title="Ocultar valores"><i class="ti ti-eye" id="eye-icon" aria-hidden="true"></i></button>
+        <div class="usuario-chip" onclick="trocarUsuario()" id="usuario-chip" title="Trocar usuário">
         <div class="u-av" id="u-av">F</div>
         <span class="u-nome" id="u-nome">Fred</span>
         <i class="ti ti-chevron-down" style="font-size:12px;color:var(--text2)" aria-hidden="true"></i>
+      </div>
       </div>
     </div>
     <div class="mes-nav">
@@ -326,13 +333,14 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 // ── DADOS ──────────────────────────────────────────
 const RENDA = 22554.93
 const CATS = [
-  {id:'gas', icon:'ti ti-gas-station',    label:'Gasolina',      limite:2000, color:'#378ADD'},
-  {id:'merc',icon:'ti ti-shopping-cart',  label:'Mercado/Casa',  limite:2500, color:'#1D9E75'},
-  {id:'rua', icon:'ti ti-tools-kitchen-2',label:'Lanche na rua', limite:1000, color:'#EF9F27'},
-  {id:'farm',icon:'ti ti-pill',           label:'Farmácia',      limite:500,  color:'#D4537E'},
-  {id:'shop',icon:'ti ti-shopping-bag',   label:'Shopee/Compras',limite:600,  color:'#7F77DD'},
-  {id:'uber',icon:'ti ti-car',             label:'Uber',          limite:300,  color:'#1C2A38'},
-  {id:'out', icon:'ti ti-dots',           label:'Outros',        limite:800,  color:'#888780'},
+  {id:'gas', icon:'ti ti-gas-station',    label:'Gasolina', color:'#378ADD'},
+  {id:'merc',icon:'ti ti-shopping-cart',  label:'Mercado/Casa', color:'#1D9E75'},
+  {id:'rua', icon:'ti ti-tools-kitchen-2',label:'Lanche na rua', color:'#EF9F27'},
+  {id:'farm',icon:'ti ti-pill',           label:'Farmácia',  color:'#D4537E'},
+  {id:'shop',icon:'ti ti-shopping-bag',   label:'Shopee/Compras',  color:'#7F77DD'},
+  {id:'uber', icon:'ti ti-car',            label:'Uber',  color:'#1C2A38'},
+  {id:'ifood',icon:'ti ti-motorbike',        label:'iFood',  color:'#EA1D2C'},
+  {id:'out', icon:'ti ti-dots',           label:'Outros',  color:'#888780'},
 ]
 const GRUPOS_BASE = [
   {id:'casa',titulo:'Contas da Casa',icon:'ti ti-home',color:'#378ADD',boletos:[
@@ -356,10 +364,10 @@ const GRUPOS_BASE = [
     {id:'emprest', nome:'Parcela Empréstimo',         valorPadrao:2550.00,venc:10},
   ]},
 ]
-const LIMITE_VAR = CATS.reduce((a,b)=>a+b.limite,0)
 
 // ── ESTADO ─────────────────────────────────────────
 let gastos=[], boletosPagos=[], boletoValores={}, boletoVencimentos={}, boletoNomes={}, gruposCollapsed={}
+let ocultarValores=false
 let usuario=null, catSel=null, tipoLanc='normal', numParcelas=2, histFiltro='todos', mesOffset=0
 let editBoletoId=null
 
@@ -381,6 +389,17 @@ window.mudarMes=dir=>{mesOffset+=dir;document.getElementById('mes-label').textCo
 
 // ── UTILS ──────────────────────────────────────────
 const fmt=v=>'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})
+const fmtV=v=>ocultarValores?`<span class="valor-oculto">${fmt(v)}</span>`:fmt(v)
+
+window.toggleOcultar=function(){
+  ocultarValores=!ocultarValores
+  localStorage.setItem('gastei_ocultar', ocultarValores?'1':'0')
+  const btn=document.getElementById('eye-btn')
+  const ico=document.getElementById('eye-icon')
+  if(btn) btn.classList.toggle('oculto', ocultarValores)
+  if(ico) ico.className=ocultarValores?'ti ti-eye-off':'ti ti-eye'
+  renderControle();renderFixos();renderHist()
+}
 
 function getSaudacao(){
   const h=new Date().getHours()
@@ -395,7 +414,7 @@ function toast(msg){
   setTimeout(()=>el.classList.remove('show'),2500)
 }
 function hideLoading(){const el=document.getElementById('loading');if(!el)return;el.classList.add('hide');setTimeout(()=>el.remove(),400)}
-function grupos(){return GRUPOS_BASE.map(g=>({...g,boletos:g.boletos.map(b=>({...b,valor:boletoValores[b.id]??b.valorPadrao}))}))}
+function grupos(){return GRUPOS_BASE.map(g=>({...g,boletos:g.boletos.map(b=>({...b,nome:boletoNomes[b.id]??b.nome,valor:boletoValores[b.id]??b.valorPadrao,venc:boletoVencimentos[b.id]??b.venc}))}))}
 function todosBoletos(){return grupos().flatMap(g=>g.boletos)}
 
 // ── IDENTIFICAÇÃO ──────────────────────────────────
@@ -559,22 +578,14 @@ function renderCatGrid(){
     const div=document.createElement('div')
     div.className='cat-btn'+(sel?' on '+(usuario||'fred'):'')
     div.innerHTML=`<div class="cat-icon"><i class="${c.icon}" style="font-size:20px;color:${c.color}" aria-hidden="true"></i></div>
-      <div class="cat-name">${c.label}</div><div class="cat-pct">${pct}% usado</div>`
+      <div class="cat-name">${c.label}</div>`
     div.onclick=()=>selCat(c.id)
     g.appendChild(div)
   })
 }
 function showAlerta(){
   const box=document.getElementById('alerta-cat');if(!box)return
-  if(!catSel){box.style.display='none';return}
-  const c=CATS.find(x=>x.id===catSel)
-  const g=gastos.filter(x=>x.cat===c.id).reduce((a,b)=>a+b.valor,0)
-  const rest=c.limite-g,pct=Math.round(g/c.limite*100)
-  let cls,msg
-  if(pct>=100){cls='alerta-ov';msg=`<i class="ti ti-alert-circle" aria-hidden="true"></i> Limite estourado em ${fmt(Math.abs(rest))}!`}
-  else if(pct>=75){cls='alerta-warn';msg=`<i class="ti ti-alert-triangle" aria-hidden="true"></i> Atenção: ${fmt(rest)} restando`}
-  else{cls='alerta-ok';msg=`<i class="ti ti-check" aria-hidden="true"></i> ${fmt(rest)} disponível (${100-pct}% livre)`}
-  box.className='alerta-cat '+cls;box.innerHTML=msg;box.style.display='block'
+  box.style.display='none'
 }
 window.lancar=async function(){
   const vTotal=parseFloat(document.getElementById('inp-valor').value)
@@ -664,15 +675,12 @@ function renderControle(){
   const totalGasto=gastos.reduce((a,b)=>a+b.valor,0)
   const totalFixo=tb.reduce((a,b)=>a+b.valor,0)
   const totalPago=tb.filter(b=>boletosPagos.includes(b.id)).reduce((a,b)=>a+b.valor,0)
-  const livre=RENDA-totalFixo-LIMITE_VAR
-  const gastoPct=Math.min(100,Math.round(totalGasto/LIMITE_VAR*100))
+  const livre=RENDA-totalFixo
   const gFred=gastos.filter(x=>x.pessoa==='fred').reduce((a,b)=>a+b.valor,0)
   const gMya=gastos.filter(x=>x.pessoa==='mya').reduce((a,b)=>a+b.valor,0)
   const fredPct=totalGasto>0?Math.round(gFred/totalGasto*100):50
   const hoje=new Date().getDate()
   const pendentes=tb.filter(b=>!boletosPagos.includes(b.id)&&b.venc-hoje>=0&&b.venc-hoje<=5)
-  const statusTxt=gastoPct>=100?'Atenção — limite variável estourado':gastoPct>=75?'Cuidado — limite variável próximo':'Bom ritmo — dentro do planejado'
-  const statusOk=gastoPct<75
 
   let html=''
 
@@ -680,12 +688,11 @@ function renderControle(){
   html+=`<div class="hero">
     <div class="hero-saudacao">${getSaudacao()}, ${usuario==='fred'?'Fred':'Mya'}! 👋</div>
     <div class="hero-label">Margem livre do mês</div>
-    <div class="hero-val">${fmt(livre)}</div>
-    <div class="hero-status${statusOk?' ok':''}">${statusTxt}</div>
+    <div class="hero-val">${fmtV(livre)}</div>
     <div class="hero-pills">
-      <div class="hp"><div class="hp-l">Renda</div><div class="hp-v">${fmt(RENDA)}</div></div>
-      <div class="hp"><div class="hp-l">Boletos pagos</div><div class="hp-v">${fmt(totalPago)}</div></div>
-      <div class="hp"><div class="hp-l">Gasto variável</div><div class="hp-v">${fmt(totalGasto)}</div></div>
+      <div class="hp"><div class="hp-l">Renda</div><div class="hp-v">${fmtV(RENDA)}</div></div>
+      <div class="hp"><div class="hp-l">Boletos pagos</div><div class="hp-v">${fmtV(totalPago)}</div></div>
+      <div class="hp"><div class="hp-l">Gasto variável</div><div class="hp-v">${fmtV(totalGasto)}</div></div>
     </div>
   </div>`
 
@@ -693,27 +700,31 @@ function renderControle(){
   html+=`<div class="card">
     <div class="card-hdr"><span class="card-title">Gastos por pessoa</span></div>
     <div class="pessoa-row">
-      <span class="p-name"><span class="dot dot-f"></span>Fred — ${fmt(gFred)}</span>
-      <span class="p-name">Mya — ${fmt(gMya)}<span class="dot dot-m"></span></span>
+      <span class="p-name"><span class="dot dot-f"></span>Fred — ${fmtV(gFred)}</span>
+      <span class="p-name">Mya — ${fmtV(gMya)}<span class="dot dot-m"></span></span>
     </div>
     <div class="stacked"><div class="sf" style="width:${fredPct}%"></div><div class="sm" style="width:${100-fredPct}%"></div></div>
   </div>`
 
-  // 3. Categorias
-  html+=`<div class="card"><div class="card-hdr"><span class="card-title">Categorias variáveis</span></div>`
+  // 3. Categorias — barra baseada na margem real (RENDA - boletos)
+  // margem distribuída: cada categoria pode consumir até 100% da margem
+  // verde < 25%, amarelo 25–50%, vermelho > 50%
+  const margemReal = Math.max(livre, 1)  // evita divisão por zero
+  html+=`<div class="card"><div class="card-hdr"><span class="card-title">Categorias variáveis</span><span style="font-size:10px;color:var(--text2)">da margem de ${fmtV(livre)}</span></div>`
   CATS.forEach(c=>{
     const gt=gastos.filter(x=>x.cat===c.id).reduce((a,b)=>a+b.valor,0)
+    if(gt===0)return  // esconde categorias sem gasto
     const gF=gastos.filter(x=>x.cat===c.id&&x.pessoa==='fred').reduce((a,b)=>a+b.valor,0)
     const gM=gastos.filter(x=>x.cat===c.id&&x.pessoa==='mya').reduce((a,b)=>a+b.valor,0)
-    const pct=Math.min(100,Math.round(gt/c.limite*100))
-    const bCls=pct>=100?'bf-ov':pct>=75?'bf-warn':'bf-ok'
-    const tCls=pct>=100?'tag-ov':pct>=75?'tag-warn':'tag-ok'
-    const tTxt=pct>=100?'Estourou':pct>=75?'Atenção':'Ok'
-    const sub=(gF>0||gM>0)?`<span style="font-size:10px;color:var(--text2)">${gF>0?'F:'+fmt(gF):''}${gF>0&&gM>0?' · ':''}${gM>0?'M:'+fmt(gM):''}</span>`:''
+    const pct=Math.min(100,Math.round(gt/margemReal*100))
+    const bCls=pct>50?'bf-ov':pct>25?'bf-warn':'bf-ok'
+    const tCls=pct>50?'tag-ov':pct>25?'tag-warn':'tag-ok'
+    const tTxt=pct>50?'Estourou':pct>25?'Atenção':'Ok'
+    const sub=(gF>0||gM>0)?`<span style="font-size:10px;color:var(--text2)">${gF>0?'F:'+fmtV(gF):''}${gF>0&&gM>0?' · ':''}${gM>0?'M:'+fmtV(gM):''}</span>`:''
     html+=`<div class="prog">
       <div class="prog-top">
         <span class="prog-name"><i class="${c.icon}" style="font-size:13px;color:${c.color}" aria-hidden="true"></i>${c.label} ${sub}</span>
-        <span class="prog-right"><span class="prog-vals">${fmt(gt)} / ${fmt(c.limite)}</span><span class="tag ${tCls}">${tTxt}</span></span>
+        <span class="prog-right"><span class="prog-vals">${fmtV(gt)} (${pct}%)</span><span class="tag ${tCls}">${tTxt}</span></span>
       </div>
       <div class="bar"><div class="bf ${bCls}" style="width:${pct}%"></div></div>
     </div>`
@@ -730,7 +741,7 @@ function renderControle(){
     html+=`<div style="margin-bottom:9px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px">
         <span style="font-weight:500;display:flex;align-items:center;gap:5px"><i class="${gr.icon}" style="font-size:13px;color:${gr.color}" aria-hidden="true"></i>${gr.titulo}</span>
-        <span style="color:var(--text2)">${pagos}/${gr.boletos.length} · ${fmt(pago$)}</span>
+        <span style="color:var(--text2)">${pagos}/${gr.boletos.length} · ${fmtV(pago$)}</span>
       </div>
       <div class="bar"><div class="bf bf-ok" style="width:${pct}%"></div></div>
     </div>`
@@ -739,10 +750,10 @@ function renderControle(){
 
   // 5. Métricas resumo (penúltimo)
   html+=`<div class="metric-grid">
-    <div class="metric"><div class="metric-l">Renda</div><div class="metric-v">${fmt(RENDA)}</div></div>
-    <div class="metric"><div class="metric-l">Boletos pagos</div><div class="metric-v${totalPago===totalFixo?' ok':''}">${fmt(totalPago)}</div></div>
-    <div class="metric"><div class="metric-l">Gasto variável</div><div class="metric-v${gastoPct>=100?' ov':gastoPct>=75?' warn':''}">${fmt(totalGasto)}</div></div>
-    <div class="metric"><div class="metric-l">Margem livre</div><div class="metric-v ok">${fmt(livre)}</div></div>
+    <div class="metric"><div class="metric-l">Renda</div><div class="metric-v">${fmtV(RENDA)}</div></div>
+    <div class="metric"><div class="metric-l">Boletos pagos</div><div class="metric-v${totalPago===totalFixo?' ok':''}">${fmtV(totalPago)}</div></div>
+    <div class="metric"><div class="metric-l">Gasto variável</div><div class="metric-v">${fmtV(totalGasto)}</div></div>
+    <div class="metric"><div class="metric-l">Margem livre</div><div class="metric-v ok">${fmtV(livre)}</div></div>
   </div>`
 
   // 6. Vencendo em breve (último)
@@ -751,7 +762,7 @@ function renderControle(){
       <div class="al-title"><i class="ti ti-bell" aria-hidden="true"></i> Vencendo em breve</div>`
     pendentes.forEach(b=>{
       const d=b.venc-hoje
-      html+=`<div class="al-row"><span>${b.nome}</span><span>${d===0?'Vence hoje!':'Em '+d+'d'} · ${fmt(b.valor)}</span></div>`
+      html+=`<div class="al-row"><span>${b.nome}</span><span>${d===0?'Vence hoje!':'Em '+d+'d'} · ${fmtV(b.valor)}</span></div>`
     })
     html+=`</div>`
   }
@@ -766,8 +777,8 @@ function renderFixos(){
   const totalGeral=tb.reduce((a,b)=>a+b.valor,0)
   const totalPago=tb.filter(b=>boletosPagos.includes(b.id)).reduce((a,b)=>a+b.valor,0)
   let html=`<div class="metric-grid">
-    <div class="metric"><div class="metric-l">Total de boletos</div><div class="metric-v">${fmt(totalGeral)}</div></div>
-    <div class="metric"><div class="metric-l">Pago até agora</div><div class="metric-v ok">${fmt(totalPago)}</div></div>
+    <div class="metric"><div class="metric-l">Total de boletos</div><div class="metric-v">${fmtV(totalGeral)}</div></div>
+    <div class="metric"><div class="metric-l">Pago até agora</div><div class="metric-v ok">${fmtV(totalPago)}</div></div>
   </div>`
   grupos().forEach(gr=>{
     const collapsed=gruposCollapsed[gr.id]
@@ -777,7 +788,7 @@ function renderFixos(){
       <div class="grupo-hdr" onclick="toggleGrupo('${gr.id}')">
         <span class="grupo-titulo"><i class="${gr.icon}" style="font-size:15px;color:${gr.color}" aria-hidden="true"></i>${gr.titulo}</span>
         <span style="display:flex;align-items:center;gap:7px">
-          <span class="grupo-resumo">${pagos}/${gr.boletos.length} · ${fmt(pago$)}</span>
+          <span class="grupo-resumo">${pagos}/${gr.boletos.length} · ${fmtV(pago$)}</span>
           <i class="ti ${collapsed?'ti-chevron-down':'ti-chevron-up'}" style="font-size:13px;color:var(--text2)" aria-hidden="true"></i>
         </span>
       </div>`
@@ -799,7 +810,7 @@ function renderFixos(){
             </div>
           </div>
           <div class="b-right">
-            <div class="b-val">${fmt(b.valor)}</div>
+            <div class="b-val">${fmtV(b.valor)}</div>
             <button class="edit-btn" onclick="abrirModal('${b.id}','${b.nome}',${b.valor},${b.venc})" aria-label="Editar valor"><i class="ti ti-pencil" aria-hidden="true"></i></button>
           </div>
         </div>`
@@ -823,8 +834,8 @@ function renderHist(){
   if(!sorted.length){html+=`<div class="card"><p class="empty"><i class="ti ti-receipt-off" style="font-size:26px;display:block;margin-bottom:8px" aria-hidden="true"></i>Nenhum lançamento ainda</p></div>`;el.innerHTML=html;return}
   const totalF=filtrados.reduce((a,b)=>a+b.valor,0)
   html+=`<div class="metric-grid">
-    <div class="metric"><div class="metric-l">${sorted.length} lançamento${sorted.length!==1?'s':''}</div><div class="metric-v">${fmt(totalF)}</div></div>
-    <div class="metric"><div class="metric-l">Média por gasto</div><div class="metric-v">${fmt(sorted.length?totalF/sorted.length:0)}</div></div>
+    <div class="metric"><div class="metric-l">${sorted.length} lançamento${sorted.length!==1?'s':''}</div><div class="metric-v">${fmtV(totalF)}</div></div>
+    <div class="metric"><div class="metric-l">Média por gasto</div><div class="metric-v">${fmtV(sorted.length?totalF/sorted.length:0)}</div></div>
   </div><div class="card">`
   sorted.forEach(g=>{
     const c=CATS.find(x=>x.id===g.cat)||{icon:'ti ti-dots',label:'Outros',color:'#888'}
@@ -842,7 +853,7 @@ function renderHist(){
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:7px">
-        <span style="font-size:13px;font-weight:600;color:var(--err)">- ${fmt(g.valor)}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--err)">- ${fmtV(g.valor)}</span>
         <button class="del-btn" onclick="deletarGasto('${g.id}')" aria-label="Excluir"><i class="ti ti-trash" aria-hidden="true"></i></button>
       </div>
     </div>`
@@ -867,6 +878,11 @@ async function init(){
   boletoValores=JSON.parse(localStorage.getItem('boletoValores')||'{}')
   boletoVencimentos=JSON.parse(localStorage.getItem('boletoVencimentos')||'{}')
   boletoNomes=JSON.parse(localStorage.getItem('boletoNomes')||'{}')
+  ocultarValores=localStorage.getItem('gastei_ocultar')==='1'
+  const eyeBtn=document.getElementById('eye-btn')
+  const eyeIco=document.getElementById('eye-icon')
+  if(eyeBtn) eyeBtn.classList.toggle('oculto',ocultarValores)
+  if(eyeIco) eyeIco.className=ocultarValores?'ti ti-eye-off':'ti ti-eye'
   try{await Promise.all([carregarGastos(),carregarBoletos()])}catch{}
   atualizarTotaisLogin()
   const u=localStorage.getItem('gastei_usuario')
