@@ -73,6 +73,9 @@
     .tnb{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 0 9px;border:none;background:transparent;cursor:pointer;color:var(--text2);font-size:10px;font-weight:500;border-bottom:2px solid transparent;transition:all .15s}
     .tnb i{font-size:19px}
     .tnb.on{color:var(--fred);border-bottom-color:var(--fred)}
+    .tnb-central{position:relative;padding:4px 0 9px}
+    .tnb-logo{font-size:22px;display:block;margin-bottom:1px}
+    .tnb-central.on{color:var(--fred);border-bottom-color:var(--fred)}
 
     /* CONTENT */
     .content{flex:1;overflow-y:auto;padding:14px}
@@ -202,6 +205,10 @@
     .modal-box{background:var(--surface);border-radius:var(--r) var(--r) 0 0;padding:20px;width:100%;max-width:480px}
     .modal-title{font-size:15px;font-weight:600;margin-bottom:14px}
     .modal-input{width:100%;font-size:24px;font-weight:700;border:none;border-bottom:2px solid var(--fred);background:transparent;color:var(--text);padding:4px 0;outline:none;text-align:center;margin-bottom:16px}
+    .modal-field{margin-bottom:16px}
+    .modal-field-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+    .modal-venc-ctrl{display:flex;align-items:center;justify-content:center;gap:16px}
+    .modal-venc-num{font-size:28px;font-weight:700;min-width:40px;text-align:center;color:var(--text)}
     .modal-btns{display:flex;gap:8px}
     .modal-btn{flex:1;padding:12px;border:none;border-radius:var(--rs);font-size:13px;font-weight:600;cursor:pointer}
     .modal-btn.cancel{background:var(--bg);color:var(--text2)}.modal-btn.confirm{background:var(--fred);color:#fff}
@@ -245,8 +252,19 @@
 <!-- MODAL BOLETO -->
 <div id="modal-boleto" class="hide">
   <div class="modal-box">
-    <div class="modal-title" id="modal-titulo">Editar valor</div>
-    <input class="modal-input" type="number" id="modal-inp" inputmode="decimal" step="0.01" />
+    <div class="modal-title" id="modal-titulo">Editar boleto</div>
+    <div class="modal-field">
+      <div class="modal-field-label">Valor (R$)</div>
+      <input class="modal-input" type="number" id="modal-inp-valor" inputmode="decimal" step="0.01" placeholder="0,00" />
+    </div>
+    <div class="modal-field">
+      <div class="modal-field-label">Dia do vencimento</div>
+      <div class="modal-venc-ctrl">
+        <button class="parc-btn" onclick="mudaVenc(-1)">−</button>
+        <span class="modal-venc-num" id="modal-venc-num">10</span>
+        <button class="parc-btn" onclick="mudaVenc(1)">+</button>
+      </div>
+    </div>
     <div class="modal-btns">
       <button class="modal-btn cancel" onclick="fecharModal()">Cancelar</button>
       <button class="modal-btn confirm" onclick="salvarModal()">Salvar</button>
@@ -259,10 +277,7 @@
   <header class="hdr">
     <div class="hdr-top">
       <div class="hdr-left">
-        <div>
-          <div class="hdr-logo">💸 Gastei!</div>
-          <div class="hdr-sub">Controle financeiro do Fred e da Mya</div>
-        </div>
+        <div class="hdr-sub">Controle financeiro do Fred e da Mya</div>
       </div>
       <div class="usuario-chip" onclick="trocarUsuario()" id="usuario-chip" title="Trocar usuário">
         <div class="u-av" id="u-av">F</div>
@@ -276,8 +291,11 @@
       <button class="mes-arrow" onclick="mudarMes(1)"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
     </div>
     <nav class="top-nav">
-      <button class="tnb on" onclick="goPage('dash')"><i class="ti ti-chart-bar" aria-hidden="true"></i>Painel</button>
-      <button class="tnb" onclick="goPage('lancar')"><i class="ti ti-plus-circle" aria-hidden="true"></i>Lançar</button>
+      <button class="tnb" onclick="goPage('controle')"><i class="ti ti-chart-bar" aria-hidden="true"></i>Controle</button>
+      <button class="tnb tnb-central on" onclick="goPage('dash')" id="nav-gastei">
+        <span class="tnb-logo">💸</span>
+        <span>Gastei!</span>
+      </button>
       <button class="tnb" onclick="goPage('fixos')"><i class="ti ti-receipt" aria-hidden="true"></i>Boletos</button>
       <button class="tnb" onclick="goPage('historico')"><i class="ti ti-list" aria-hidden="true"></i>Histórico</button>
     </nav>
@@ -285,35 +303,9 @@
 
   <main class="content">
     <div id="page-dash" class="page on"></div>
+    <div id="page-controle" class="page"></div>
 
-    <div id="page-lancar" class="page">
-      <div class="lancar-card">
-        <p class="sec-label">Tipo de pagamento</p>
-        <div class="tipo-toggle">
-          <button class="tipo-btn" id="tipo-normal" onclick="selTipo('normal')"><i class="ti ti-cash" aria-hidden="true"></i> À vista</button>
-          <button class="tipo-btn" id="tipo-cartao" onclick="selTipo('cartao')"><i class="ti ti-credit-card" aria-hidden="true"></i> Cartão parcelado</button>
-        </div>
-        <div id="parcelas-area" style="display:none">
-          <div class="parcelas-row">
-            <span class="parcelas-label">Parcelas:</span>
-            <div class="parc-ctrl">
-              <button class="parc-btn" onclick="mudaParcelas(-1)">−</button>
-              <span class="parc-num" id="parc-num">2</span>
-              <button class="parc-btn" onclick="mudaParcelas(1)">+</button>
-            </div>
-          </div>
-          <div class="parc-info" id="parc-info"></div>
-        </div>
-        <p class="sec-label">Categoria</p>
-        <div class="cat-grid" id="cat-grid"></div>
-        <div id="alerta-cat" style="display:none"></div>
-        <label class="inp-label" id="valor-label">Valor (R$)</label>
-        <input class="valor-input" type="number" id="inp-valor" placeholder="0,00" min="0" step="0.01" inputmode="decimal" oninput="atualizaParcelaInfo()" />
-        <label class="inp-label">O que foi? (opcional)</label>
-        <input class="obs-input" type="text" id="inp-obs" placeholder="ex: tênis, mercado, jantar…" />
-        <button class="btn-main btn-off" id="btn-lancar" onclick="lancar()">Registrar gasto</button>
-      </div>
-    </div>
+
 
     <div id="page-fixos" class="page"></div>
     <div id="page-historico" class="page"></div>
@@ -362,7 +354,7 @@ const GRUPOS_BASE = [
 const LIMITE_VAR = CATS.reduce((a,b)=>a+b.limite,0)
 
 // ── ESTADO ─────────────────────────────────────────
-let gastos=[], boletosPagos=[], boletoValores={}, gruposCollapsed={}
+let gastos=[], boletosPagos=[], boletoValores={}, boletoVencimentos={}, gruposCollapsed={}
 let usuario=null, catSel=null, tipoLanc='normal', numParcelas=2, histFiltro='todos', mesOffset=0
 let editBoletoId=null
 
@@ -477,20 +469,29 @@ window.toggleGrupo=async function(id){
 }
 
 // ── MODAL BOLETO ───────────────────────────────────
-window.abrirModal=function(id,nome,val){
+window.abrirModal=function(id,nome,val,venc){
   editBoletoId=id
   document.getElementById('modal-titulo').textContent='Editar: '+nome
-  document.getElementById('modal-inp').value=val
+  document.getElementById('modal-inp-valor').value=val
+  document.getElementById('modal-venc-num').textContent=venc||10
   document.getElementById('modal-boleto').classList.remove('hide')
-  setTimeout(()=>document.getElementById('modal-inp').focus(),100)
+  setTimeout(()=>document.getElementById('modal-inp-valor').focus(),100)
+}
+window.mudaVenc=function(d){
+  const el=document.getElementById('modal-venc-num')
+  const v=Math.max(1,Math.min(31,parseInt(el.textContent)+d))
+  el.textContent=v
 }
 window.fecharModal=function(){document.getElementById('modal-boleto').classList.add('hide');editBoletoId=null}
 window.salvarModal=function(){
-  const v=parseFloat(document.getElementById('modal-inp').value)
-  if(!editBoletoId||isNaN(v)||v<=0){fecharModal();return}
-  boletoValores[editBoletoId]=v
+  const v=parseFloat(document.getElementById('modal-inp-valor').value)
+  const d=parseInt(document.getElementById('modal-venc-num').textContent)
+  if(!editBoletoId){fecharModal();return}
+  if(!isNaN(v)&&v>0) boletoValores[editBoletoId]=v
+  if(!isNaN(d)&&d>=1&&d<=31) boletoVencimentos[editBoletoId]=d
   localStorage.setItem('boletoValores',JSON.stringify(boletoValores))
-  fecharModal();renderFixos();renderDash();toast('✅ Valor atualizado!')
+  localStorage.setItem('boletoVencimentos',JSON.stringify(boletoVencimentos))
+  fecharModal();renderFixos();renderControle();renderHome();toast('✅ Boleto atualizado!')
 }
 
 // ── NAVEGAÇÃO ──────────────────────────────────────
@@ -498,12 +499,12 @@ window.goPage=function(p){
   document.querySelectorAll('.page').forEach(e=>e.classList.remove('on'))
   document.querySelectorAll('.tnb').forEach(e=>e.classList.remove('on'))
   document.getElementById('page-'+p).classList.add('on')
-  const idx=['dash','lancar','fixos','historico'].indexOf(p)
-  document.querySelectorAll('.tnb')[idx].classList.add('on')
-  if(p==='dash')renderDash()
+  const idx=['controle','dash','fixos','historico'].indexOf(p)
+  if(idx>=0)document.querySelectorAll('.tnb')[idx].classList.add('on')
+  if(p==='dash')renderHome()
+  if(p==='controle')renderControle()
   if(p==='fixos')renderFixos()
   if(p==='historico')renderHist()
-  if(p==='lancar')renderLancar()
 }
 
 // ── LANÇAR ─────────────────────────────────────────
@@ -532,7 +533,9 @@ function atualizarBotao(){
   const ok=usuario&&catSel
   btn.className='btn-main '+(ok?(usuario==='fred'?'btn-fred':'btn-mya'):'btn-off')
 }
-function renderLancar(){
+function renderLancar(){renderHome();return
+  // legacy below
+  
   const inp=document.getElementById('inp-valor')
   if(inp)inp.className='valor-input'+(usuario?' '+usuario:'')
   selTipo(tipoLanc);renderCatGrid();showAlerta();atualizarBotao()
@@ -594,9 +597,72 @@ window.lancar=async function(){
   goPage('dash')
 }
 
-// ── PAINEL ─────────────────────────────────────────
-function renderDash(){
+// ── HOME (LANÇAR RÁPIDO) ───────────────────────────
+function renderHome(){
   const el=document.getElementById('page-dash');if(!el)return
+  const gFred=gastos.filter(x=>x.pessoa==='fred').reduce((a,b)=>a+b.valor,0)
+  const gMya=gastos.filter(x=>x.pessoa==='mya').reduce((a,b)=>a+b.valor,0)
+  const gPessoa=usuario==='fred'?gFred:gMya
+  const totalGasto=gastos.reduce((a,b)=>a+b.valor,0)
+  const hoje=new Date().getDate()
+  const tb=todosBoletos()
+  const pendentes=tb.filter(b=>!boletosPagos.includes(b.id)&&b.venc-hoje>=0&&b.venc-hoje<=5)
+
+  let html=`<div style="text-align:center;padding:24px 0 20px">
+    <div style="font-size:48px;margin-bottom:6px">💸</div>
+    <div style="font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px">${getSaudacao()}, ${usuario==='fred'?'Fred':'Mya'}!</div>
+    <div style="font-size:13px;color:var(--text2)">Você gastou ${fmt(gPessoa)} este mês</div>
+  </div>`
+
+  // Tipo de pagamento
+  html+=`<div class="lancar-card">
+    <p class="sec-label">Tipo de pagamento</p>
+    <div class="tipo-toggle">
+      <button class="tipo-btn" id="tipo-normal" onclick="selTipo('normal')"><i class="ti ti-cash" aria-hidden="true"></i> À vista</button>
+      <button class="tipo-btn" id="tipo-cartao" onclick="selTipo('cartao')"><i class="ti ti-credit-card" aria-hidden="true"></i> Cartão parcelado</button>
+    </div>
+    <div id="parcelas-area" style="display:none">
+      <div class="parcelas-row">
+        <span class="parcelas-label">Parcelas:</span>
+        <div class="parc-ctrl">
+          <button class="parc-btn" onclick="mudaParcelas(-1)">−</button>
+          <span class="parc-num" id="parc-num">2</span>
+          <button class="parc-btn" onclick="mudaParcelas(1)">+</button>
+        </div>
+      </div>
+      <div class="parc-info" id="parc-info"></div>
+    </div>
+    <p class="sec-label">Categoria</p>
+    <div class="cat-grid" id="cat-grid"></div>
+    <div id="alerta-cat" style="display:none"></div>
+    <label class="inp-label" id="valor-label">Valor (R$)</label>
+    <input class="valor-input" type="number" id="inp-valor" placeholder="0,00" min="0" step="0.01" inputmode="decimal" oninput="atualizaParcelaInfo()" />
+    <label class="inp-label">O que foi? (opcional)</label>
+    <input class="obs-input" type="text" id="inp-obs" placeholder="ex: tênis, mercado, jantar…" />
+    <button class="btn-main btn-off" id="btn-lancar" onclick="lancar()">Registrar gasto</button>
+  </div>`
+
+  if(pendentes.length){
+    html+=`<div class="alerta">
+      <div class="al-title"><i class="ti ti-bell" aria-hidden="true"></i> Vencendo em breve</div>`
+    pendentes.forEach(b=>{
+      const d=b.venc-hoje
+      html+=`<div class="al-row"><span>${b.nome}</span><span>${d===0?'Vence hoje!':'Em '+d+'d'} · ${fmt(b.valor)}</span></div>`
+    })
+    html+=`</div>`
+  }
+
+  el.innerHTML=html
+  // reinit tipo e cat depois de renderizar
+  selTipo(tipoLanc)
+  renderCatGrid()
+  showAlerta()
+  atualizarBotao()
+}
+
+// ── CONTROLE (antigo PAINEL) ────────────────────────
+function renderControle(){
+  const el=document.getElementById('page-controle');if(!el)return
   const tb=todosBoletos()
   const totalGasto=gastos.reduce((a,b)=>a+b.valor,0)
   const totalFixo=tb.reduce((a,b)=>a+b.valor,0)
@@ -737,7 +803,7 @@ function renderFixos(){
           </div>
           <div class="b-right">
             <div class="b-val">${fmt(b.valor)}</div>
-            <button class="edit-btn" onclick="abrirModal('${b.id}','${b.nome}',${b.valor})" aria-label="Editar valor"><i class="ti ti-pencil" aria-hidden="true"></i></button>
+            <button class="edit-btn" onclick="abrirModal('${b.id}','${b.nome}',${b.valor},${b.venc})" aria-label="Editar valor"><i class="ti ti-pencil" aria-hidden="true"></i></button>
           </div>
         </div>`
       })
@@ -790,7 +856,7 @@ function renderHist(){
 window.setFiltro=f=>{histFiltro=f;renderHist()}
 
 // ── RENDER GERAL ───────────────────────────────────
-function renderAll(){renderLancar();renderDash();renderFixos();renderHist()}
+function renderAll(){renderHome();renderControle();renderFixos();renderHist()}
 async function recarregarDados(){
   await Promise.all([carregarGastos(),carregarBoletos()])
   atualizarTotaisLogin()
@@ -802,6 +868,7 @@ async function init(){
   document.getElementById('mes-label').textContent=mesLabel()
   gruposCollapsed=JSON.parse(localStorage.getItem('gruposCollapsed')||'{}')
   boletoValores=JSON.parse(localStorage.getItem('boletoValores')||'{}')
+  boletoVencimentos=JSON.parse(localStorage.getItem('boletoVencimentos')||'{}')
   try{await Promise.all([carregarGastos(),carregarBoletos()])}catch{}
   atualizarTotaisLogin()
   const u=localStorage.getItem('gastei_usuario')
