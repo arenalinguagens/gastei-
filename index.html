@@ -265,24 +265,7 @@
 <div id="toast"></div>
 <div id="offline-bar"><i class="ti ti-wifi-off" aria-hidden="true"></i> Sem internet — salvo localmente</div>
 
-<!-- MODAL EDITAR GASTO -->
-<div id="modal-editar-gasto" class="hide">
-  <div class="modal-box">
-    <div class="modal-title">Editar lançamento</div>
-    <div class="modal-field">
-      <div class="modal-field-label">Valor (R$)</div>
-      <input class="modal-input" type="number" id="eg-valor" inputmode="decimal" step="0.01" />
-    </div>
-    <div class="modal-field">
-      <div class="modal-field-label">Observação</div>
-      <input class="modal-input" type="text" id="eg-obs" style="font-size:16px" />
-    </div>
-    <div class="modal-btns">
-      <button class="modal-btn cancel" onclick="fecharEditarGasto()">Cancelar</button>
-      <button class="modal-btn confirm" onclick="salvarEdicaoGasto()">Salvar</button>
-    </div>
-  </div>
-</div>
+
 
 <!-- TELA DE IDENTIFICAÇÃO -->
 <div id="tela-login">
@@ -375,7 +358,12 @@
 
 const SUPABASE_URL      = 'https://anrhurtohxpngtdlhtup.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFucmh1cnRvaHhwbmd0ZGxodHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNDM1MzMsImV4cCI6MjA5NTkxOTUzM30.Hx-QRYQDkFeeAjFpns2Ito9YwkHJtCeDyLBDXL7zDkU'
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+let sb = null
+function initSB(){
+  if(sb) return
+  if(!window.supabase){console.error('Supabase UMD not loaded');return}
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+}
 
 // ── DADOS ──────────────────────────────────────────
 const RENDA = 22554.93
@@ -418,6 +406,7 @@ let ocultarValores=false
 let usuario=null, catSel=null, tipoLanc='normal', numParcelas=2, histFiltro='todos', mesOffset=0
 let editBoletoId=null
 let editGastoId=null
+let editGastoInline=null  // id do gasto sendo editado inline no histórico
 let histCatFiltro='todas'
 let isOnline=navigator.onLine
 let modoConfigBoletos=false
@@ -537,6 +526,7 @@ function atualizarTotaisLogin(){
 
 // ── SUPABASE ───────────────────────────────────────
 async function carregarGastos(){
+  if(!sb){return}
   try{
     const{data,error}=await sb.from('gastos').select('*').eq('mes',mesAtual()).order('created_at',{ascending:true})
     if(error)throw error
@@ -558,6 +548,7 @@ async function resetBoletosPagosSeNovoMes(){
 }
 
 async function carregarBoletos(){
+  if(!sb){return}
   try{
     const{data,error}=await sb.from('boletos_pagos').select('boleto_id').eq('mes',mesAtual())
     if(error)throw error
@@ -566,6 +557,7 @@ async function carregarBoletos(){
 }
 
 async function carregarBoletoConfig(){
+  if(!sb){return}
   try{
     const{data,error}=await sb.from('boleto_config').select('*')
     if(error)throw error
@@ -587,6 +579,7 @@ async function carregarBoletoConfig(){
 }
 
 async function carregarBoletosExtras(){
+  if(!sb){return}
   try{
     const{data,error}=await sb.from('boletos_extras').select('*').order('created_at',{ascending:true})
     if(error)throw error
@@ -607,27 +600,28 @@ async function salvarGasto(novo){
   catch{toast('⚠️ Salvo localmente (sem internet)')}
 }
 window.abrirEditarGasto=function(id){
-  const g=gastos.find(x=>x.id===id);if(!g)return
-  editGastoId=id
-  document.getElementById('eg-valor').value=g.valor
-  document.getElementById('eg-obs').value=g.obs||''
-  document.getElementById('modal-editar-gasto').classList.remove('hide')
-  setTimeout(()=>document.getElementById('eg-valor').focus(),100)
+  editGastoInline=editGastoInline===id?null:id
+  renderHist()
+  if(editGastoInline){
+    setTimeout(()=>{const el=document.getElementById('eg-valor-'+editGastoInline);if(el)el.focus()},80)
+  }
 }
 window.fecharEditarGasto=function(){
-  document.getElementById('modal-editar-gasto').classList.add('hide')
-  editGastoId=null
+  editGastoInline=null
+  renderHist()
 }
-window.salvarEdicaoGasto=async function(){
-  const v=parseFloat(document.getElementById('eg-valor').value)
-  const obs=document.getElementById('eg-obs').value.trim()
-  if(!editGastoId||isNaN(v)||v<=0){fecharEditarGasto();return}
-  const idx=gastos.findIndex(x=>x.id===editGastoId)
-  if(idx<0){fecharEditarGasto();return}
+window.salvarEdicaoGasto=async function(id){
+  const v=parseFloat(document.getElementById('eg-valor-'+id).value)
+  const obs=document.getElementById('eg-obs-'+id).value.trim()
+  if(isNaN(v)||v<=0){toast('⚠️ Valor inválido');return}
+  const idx=gastos.findIndex(x=>x.id===id)
+  if(idx<0)return
   gastos[idx]={...gastos[idx],valor:v,obs}
-  persistLocal();renderAll()
-  try{await sb.from('gastos').update({valor:v,obs}).eq('id',editGastoId)}catch(e){console.warn(e)}
-  fecharEditarGasto();toast('✅ Lançamento atualizado!')
+  persistLocal()
+  editGastoInline=null
+  renderAll()
+  try{await sb.from('gastos').update({valor:v,obs}).eq('id',id)}catch(e){console.warn(e)}
+  toast('✅ Lançamento atualizado!')
 }
 
 window.deletarGasto=async function(id){
@@ -691,11 +685,12 @@ window.toggleGrupo=async function(id){
 
 // ── MODAL BOLETO ───────────────────────────────────
 window.abrirModal=function(id,nome,val,venc){
+  // accepts string values from data attributes
   editBoletoId=id
   document.getElementById('modal-titulo').textContent='Editar boleto'
-  document.getElementById('modal-inp-nome').value=nome
-  document.getElementById('modal-inp-valor').value=val
-  document.getElementById('modal-venc-num').value=venc||10
+  document.getElementById('modal-inp-nome').value=nome||''
+  document.getElementById('modal-inp-valor').value=parseFloat(val)||0
+  document.getElementById('modal-venc-num').value=parseInt(venc)||10
   document.getElementById('modal-boleto').classList.remove('hide')
   setTimeout(()=>document.getElementById('modal-inp-nome').focus(),100)
 }
@@ -1102,25 +1097,30 @@ function renderFixos(){
       gr.boletos.forEach(b=>{
         const pago=boletosPagos.includes(b.id)
         const h=new Date().getDate(),diff=b.venc-h
-        let cc='chip-ok',ct=`Dia ${b.venc}`
-        if(pago){cc='chip-ok';ct='Pago ✓'}
-        else if(diff<0){cc='chip-warn';ct=`Dia ${b.venc}`}
-        else if(diff===0){cc='chip-err';ct='Vence hoje!'}
-        else if(diff<=5){cc='chip-warn';ct=`Em ${diff}d`}
-        html+=`<div class="boleto-row">
-          <div class="b-check" onclick="toggleBoleto('${b.id}')">
-            <div class="chk ${pago?'on':''}"><i class="ti ti-check" style="font-size:11px;color:${pago?'#fff':'transparent'}" aria-hidden="true"></i></div>
-            <div class="b-info">
-              <div class="b-nome ${pago?'riscado':''}">${b.nome}</div>
-              <span class="chip ${cc}">${ct}</span>
-            </div>
-          </div>
-          <div class="b-right">
-            <div class="b-val">${fmtV(b.valor)}</div>
-            ${modoConfigBoletos&&b._extra?`<button class="b-del" onclick="excluirBoletoExtra('${b.id}')" aria-label="Excluir"><i class="ti ti-trash" aria-hidden="true"></i></button>`:''}
-            <button class="edit-btn" onclick="abrirModal('${b.id}','${b.nome}',${b.valor},${b.venc})" aria-label="Editar"><i class="ti ti-pencil" aria-hidden="true"></i></button>
-          </div>
-        </div>`
+        let cc,ct
+        if(pago)           { cc='chip-ok';  ct='Pago ✓' }
+        else if(diff<0)    { cc='chip-warn'; ct='Dia '+b.venc }
+        else if(diff===0)  { cc='chip-err';  ct='Vence hoje!' }
+        else if(diff<=5)   { cc='chip-warn'; ct='Em '+diff+'d' }
+        else               { cc='chip-ok';   ct='Dia '+b.venc }
+        const chkCls  = 'chk'+(pago?' on':'')
+        const chkClr  = pago?'#fff':'transparent'
+        const nomeCls = 'b-nome'+(pago?' riscado':'')
+        const delBtn  = (modoConfigBoletos&&b._extra)
+          ? '<button class="b-del" onclick="excluirBoletoExtra(this.dataset.id)" data-id="'+b.id+'"><i class="ti ti-trash"></i></button>'
+          : ''
+        const editBtn = '<button class="edit-btn" onclick="abrirModal(this.dataset.id,this.dataset.nome,this.dataset.valor,this.dataset.venc)" data-id="'+b.id+'" data-nome="'+b.nome.replace(/"/g,'&quot;')+'" data-valor="'+b.valor+'" data-venc="'+b.venc+'" aria-label="Editar"><i class="ti ti-pencil" aria-hidden="true"></i></button>'
+        html += '<div class="boleto-row">'
+        html += '<div class="b-check" onclick="toggleBoleto(this.dataset.id)" data-id="'+b.id+'">'
+        html += '<div class="'+chkCls+'"><i class="ti ti-check" style="font-size:11px;color:'+chkClr+'" aria-hidden="true"></i></div>'
+        html += '<div class="b-info">'
+        html += '<div class="'+nomeCls+'">'+b.nome+'</div>'
+        html += '<span class="chip '+cc+'">'+ct+'</span>'
+        html += '</div></div>'
+        html += '<div class="b-right">'
+        html += '<div class="b-val">'+fmtV(b.valor)+'</div>'
+        html += delBtn + editBtn
+        html += '</div></div>'
       })
     }
     html+=`</div>`
@@ -1147,59 +1147,14 @@ function renderHist(){
     <button class="fchip ${histFiltro==='mya'?'on':''}" onclick="setFiltro('mya')">Mya</button>
   </div>`
   // chips de categoria (scroll horizontal)
-  html+=`<div class="hist-cats">
-    <button class="fchip ${histCatFiltro==='todas'?'on':''}" onclick="setCatFiltro('todas')">Todas</button>
-    ${CATS.map(c=>`<button class="fchip ${histCatFiltro===c.id?'on':''}" onclick="setCatFiltro('${c.id}')" style="white-space:nowrap"><i class="${c.icon}" style="font-size:11px;color:${c.color}" aria-hidden="true"></i> ${c.label}</button>`).join('')}
-  </div>`
-  if(!sorted.length){html+=`<div class="card"><p class="empty"><i class="ti ti-receipt-off" style="font-size:26px;display:block;margin-bottom:8px" aria-hidden="true"></i>Nenhum lançamento ainda</p></div>`;el.innerHTML=html;return}
-  const totalF=filtrados.reduce((a,b)=>a+b.valor,0)
-  html+=`<div class="metric-grid">
-    <div class="metric"><div class="metric-l">${sorted.length} lançamento${sorted.length!==1?'s':''}</div><div class="metric-v">${fmtV(totalF)}</div></div>
-    <div class="metric"><div class="metric-l">Média por gasto</div><div class="metric-v">${fmtV(sorted.length?totalF/sorted.length:0)}</div></div>
-  </div><div class="card">`
-  sorted.forEach(g=>{
-    const c=CATS.find(x=>x.id===g.cat)||{icon:'ti ti-dots',label:'Outros',color:'#888'}
-    const isFred=g.pessoa==='fred'
-    const isParc=g.tipo==='cartao_registro'||g.tipo==='cartao_fatura'
-    const isRegistro=g.tipo==='cartao_registro'
-    const isFatura=g.tipo==='cartao_fatura'
-    html+=`<div class="lanc-row">
-      <div style="display:flex;align-items:center;gap:8px">
-        <i class="${c.icon}" style="font-size:15px;color:${c.color}" aria-hidden="true"></i>
-        <div>
-          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;flex-wrap:wrap">
-            <span style="font-size:12px;font-weight:500">${c.label}</span>
-            <span class="badge ${isFred?'badge-f':'badge-m'}">${isFred?'Fred':'Mya'}</span>
-            ${isRegistro?'<span class="badge badge-p"><i class="ti ti-credit-card" style="font-size:9px" aria-hidden="true"></i> Cartão</span>':''}${isFatura?'<span class="badge" style="background:#F0ECF9;color:#5B3FA6"><i class="ti ti-receipt" style="font-size:9px" aria-hidden="true"></i> Fatura</span>':''}
-          </div>
-          <div style="font-size:10px;color:var(--text2)">${g.data}${g.obs?' · '+g.obs:''}</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:7px">
-        <span style="font-size:13px;font-weight:600;color:var(--err)">- ${fmtV(g.valor)}</span>
-        <button class="del-btn" onclick="abrirEditarGasto('${g.id}')" aria-label="Editar" style="color:var(--text2)"><i class="ti ti-pencil" aria-hidden="true"></i></button>
-        <button class="del-btn" onclick="deletarGasto('${g.id}')" aria-label="Excluir"><i class="ti ti-trash" aria-hidden="true"></i></button>
-      </div>
-    </div>`
+  let catChips = '<div class="hist-cats">'
+  catChips += '<button class="fchip '+(histCatFiltro==='todas'?'on':'')+'" onclick="setCatFiltro(\'todas\')">Todas</button>'
+  CATS.forEach(c=>{
+    catChips += '<button class="fchip '+(histCatFiltro===c.id?'on':'')+'" onclick="setCatFiltro(this.dataset.id)" data-id="'+c.id+'" style="white-space:nowrap">'
+    catChips += '<i class="'+c.icon+'" style="font-size:11px;color:'+c.color+'"></i> '+c.label+'</button>'
   })
-  html+=`</div>`
-  el.innerHTML=html
-}
-window.setFiltro=f=>{histFiltro=f;renderHist()}
-window.setCatFiltro=f=>{histCatFiltro=f;renderHist()}
-
-window.exportarResumo=function(){
-  const tb=todosBoletos()
-  const totalFixo=tb.reduce((a,b)=>a+b.valor,0)
-  const totalPago=tb.filter(b=>boletosPagos.includes(b.id)).reduce((a,b)=>a+b.valor,0)
-  const totalGasto=gastos.reduce((a,b)=>a+b.valor,0)
-  const livre=RENDA-totalFixo
-  const gFred=gastos.filter(x=>x.pessoa==='fred').reduce((a,b)=>a+b.valor,0)
-  const gMya=gastos.filter(x=>x.pessoa==='mya').reduce((a,b)=>a+b.valor,0)
-  const mes=mesLabel()
-
-  let txt=`💸 GASTEI! — Resumo ${mes}
-`
+  catChips += '</div>'
+  html += catChips
   txt+=`${'─'.repeat(32)}
 `
   txt+=`Renda:                  ${fmt(RENDA)}
@@ -1246,6 +1201,7 @@ async function recarregarDados(){
 }
 
 function iniciarRealtime(){
+  if(!sb)return
   sb.channel('gastei-sync')
     .on('postgres_changes',{event:'*',schema:'public',table:'gastos'},      async()=>{await carregarGastos();renderAll()})
     .on('postgres_changes',{event:'*',schema:'public',table:'boletos_pagos'},async()=>{await carregarBoletos();renderFixos();renderControle()})
@@ -1256,6 +1212,7 @@ function iniciarRealtime(){
 
 // ── INIT ───────────────────────────────────────────
 async function init(){
+  initSB()
   document.getElementById('mes-label').textContent=mesLabel()
   gruposCollapsed=JSON.parse(localStorage.getItem('gruposCollapsed')||'{}')
   // boletoValores, boletoVencimentos, boletoNomes, boletosExtras
