@@ -7,6 +7,7 @@
   <meta name="description" content="Controle financeiro do Fred e da Mya" />
   <meta name="theme-color" content="#1B4F72" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💸</text></svg>" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -358,6 +359,12 @@
 
 const SUPABASE_URL      = 'https://anrhurtohxpngtdlhtup.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFucmh1cnRvaHhwbmd0ZGxodHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNDM1MzMsImV4cCI6MjA5NTkxOTUzM30.Hx-QRYQDkFeeAjFpns2Ito9YwkHJtCeDyLBDXL7zDkU'
+// Safe localStorage (Tracking Prevention may block it)
+const store = {
+  get(k){try{return store.get(k)}catch{return null}},
+  set(k,v){try{store.set(k,v)}catch{}},
+  del(k){try{store.del(k)}catch{}}
+}
 let sb = null
 function initSB(){
   if(sb) return
@@ -449,7 +456,7 @@ const fmtV=v=>ocultarValores?`<span class="valor-oculto">${fmt(v)}</span>`:fmt(v
 
 window.toggleOcultar=function(){
   ocultarValores=!ocultarValores
-  localStorage.setItem('gastei_ocultar', ocultarValores?'1':'0')
+  store.set('gastei_ocultar',ocultarValores?'1':'0')
   const btn=document.getElementById('eye-btn')
   const ico=document.getElementById('eye-icon')
   if(btn) btn.classList.toggle('oculto', ocultarValores)
@@ -495,7 +502,7 @@ function todosBoletos(){return grupos().flatMap(g=>g.boletos)}
 // ── IDENTIFICAÇÃO ──────────────────────────────────
 window.entrar=async function(p){
   usuario=p
-  localStorage.setItem('gastei_usuario',p)
+  store.set('gastei_usuario',p)
   document.getElementById('tela-login').classList.add('hide')
   atualizarChip()
   await recarregarDados()
@@ -532,19 +539,19 @@ async function carregarGastos(){
     if(error)throw error
     gastos=data||[]
   }catch{
-    gastos=JSON.parse(localStorage.getItem('gastos_v3')||'[]').filter(g=>g.mes===mesAtual())
+    gastos=JSON.parse(store.get('gastos_v3')||'[]').filter(g=>g.mes===mesAtual())
   }
 }
 async function resetBoletosPagosSeNovoMes(){
   // Se o mês financeiro mudou desde o último acesso, limpa pagos locais
-  const ultimoMes=localStorage.getItem('gastei_ultimo_mes')
+  const ultimoMes=store.get('gastei_ultimo_mes')
   const atual=mesAtual()
   if(ultimoMes && ultimoMes!==atual){
     // novo mês — boletos_pagos do mês atual virão vazios do Supabase mesmo
     // só limpamos o cache local do mês anterior
-    localStorage.removeItem('boletosPagos_v3')
+    store.del('boletosPagos_v3')
   }
-  localStorage.setItem('gastei_ultimo_mes', atual)
+  store.set('gastei_ultimo_mes',atual)
 }
 
 async function carregarBoletos(){
@@ -553,7 +560,7 @@ async function carregarBoletos(){
     const{data,error}=await sb.from('boletos_pagos').select('boleto_id').eq('mes',mesAtual())
     if(error)throw error
     boletosPagos=(data||[]).map(r=>r.boleto_id)
-  }catch{boletosPagos=JSON.parse(localStorage.getItem('boletosPagos_v3')||'[]')}
+  }catch{boletosPagos=JSON.parse(store.get('boletosPagos_v3')||'[]')}
 }
 
 async function carregarBoletoConfig(){
@@ -568,13 +575,13 @@ async function carregarBoletoConfig(){
       if(r.nome!=null)   boletoNomes[r.id]=r.nome
     })
     // cache local para offline
-    localStorage.setItem('boletoValores',JSON.stringify(boletoValores))
-    localStorage.setItem('boletoVencimentos',JSON.stringify(boletoVencimentos))
-    localStorage.setItem('boletoNomes',JSON.stringify(boletoNomes))
+    store.set('boletoValores',JSON.stringify(boletoValores))
+    store.set('boletoVencimentos',JSON.stringify(boletoVencimentos))
+    store.set('boletoNomes',JSON.stringify(boletoNomes))
   }catch{
-    boletoValores=JSON.parse(localStorage.getItem('boletoValores')||'{}')
-    boletoVencimentos=JSON.parse(localStorage.getItem('boletoVencimentos')||'{}')
-    boletoNomes=JSON.parse(localStorage.getItem('boletoNomes')||'{}')
+    boletoValores=JSON.parse(store.get('boletoValores')||'{}')
+    boletoVencimentos=JSON.parse(store.get('boletoVencimentos')||'{}')
+    boletoNomes=JSON.parse(store.get('boletoNomes')||'{}')
   }
 }
 
@@ -584,15 +591,15 @@ async function carregarBoletosExtras(){
     const{data,error}=await sb.from('boletos_extras').select('*').order('created_at',{ascending:true})
     if(error)throw error
     boletosExtras=(data||[]).map(r=>({id:r.id,nome:r.nome,valorPadrao:r.valor_padrao,venc:r.venc,grupo:r.grupo,_extra:true}))
-    localStorage.setItem('boletosExtras',JSON.stringify(boletosExtras))
+    store.set('boletosExtras',JSON.stringify(boletosExtras))
   }catch{
-    boletosExtras=JSON.parse(localStorage.getItem('boletosExtras')||'[]')
+    boletosExtras=JSON.parse(store.get('boletosExtras')||'[]')
   }
 }
 function persistLocal(){
   // gastos em memória são só do mês atual; preserva os outros meses no localStorage
-  const outros=JSON.parse(localStorage.getItem('gastos_v3')||'[]').filter(g=>g.mes!==mesAtual())
-  localStorage.setItem('gastos_v3',JSON.stringify([...outros,...gastos]))
+  const outros=JSON.parse(store.get('gastos_v3')||'[]').filter(g=>g.mes!==mesAtual())
+  store.set('gastos_v3',JSON.stringify([...outros,...gastos]))
 }
 async function salvarGasto(novo){
   gastos.push(novo);persistLocal();renderAll()
@@ -633,7 +640,7 @@ window.toggleBoleto=async function(id){
   const idx=boletosPagos.indexOf(id),pago=idx>=0
   if(pago){boletosPagos.splice(idx,1);try{await sb.from('boletos_pagos').delete().eq('boleto_id',id).eq('mes',mesAtual())}catch{}}
   else{boletosPagos.push(id);try{await sb.from('boletos_pagos').insert([{boleto_id:id,mes:mesAtual()}])}catch{}}
-  localStorage.setItem('boletosPagos_v3',JSON.stringify(boletosPagos))
+  store.set('boletosPagos_v3',JSON.stringify(boletosPagos))
   renderFixos();renderControle()
 }
 window.toggleConfigBoletos=function(){
@@ -644,7 +651,7 @@ window.toggleConfigBoletos=function(){
 window.excluirBoletoExtra=async function(id){
   if(!confirm('Excluir este boleto?'))return
   boletosExtras=boletosExtras.filter(b=>b.id!==id)
-  localStorage.setItem('boletosExtras',JSON.stringify(boletosExtras))
+  store.set('boletosExtras',JSON.stringify(boletosExtras))
   try{await sb.from('boletos_extras').delete().eq('id',id)}catch(e){console.warn('offline',e)}
   renderAll();toast('🗑 Boleto removido')
 }
@@ -669,7 +676,7 @@ window.salvarNovoBoleto=async function(){
   const id='extra_'+Date.now()
   const novo={id,nome,valorPadrao:valor,venc,grupo,_extra:true}
   boletosExtras.push(novo)
-  localStorage.setItem('boletosExtras',JSON.stringify(boletosExtras))
+  store.set('boletosExtras',JSON.stringify(boletosExtras))
   try{
     await sb.from('boletos_extras').insert([{id,nome,valor_padrao:valor,venc,grupo}])
   }catch(e){console.warn('offline',e)}
@@ -679,7 +686,7 @@ window.salvarNovoBoleto=async function(){
 
 window.toggleGrupo=async function(id){
   gruposCollapsed[id]=!gruposCollapsed[id]
-  localStorage.setItem('gruposCollapsed',JSON.stringify(gruposCollapsed))
+  store.set('gruposCollapsed',JSON.stringify(gruposCollapsed))
   renderFixos()
 }
 
@@ -705,9 +712,9 @@ window.salvarModal=async function(){
   if(!isNaN(v)&&v>0) boletoValores[editBoletoId]=v
   if(!isNaN(d)&&d>=1&&d<=31) boletoVencimentos[editBoletoId]=d
   // persiste cache local
-  localStorage.setItem('boletoValores',JSON.stringify(boletoValores))
-  localStorage.setItem('boletoVencimentos',JSON.stringify(boletoVencimentos))
-  localStorage.setItem('boletoNomes',JSON.stringify(boletoNomes))
+  store.set('boletoValores',JSON.stringify(boletoValores))
+  store.set('boletoVencimentos',JSON.stringify(boletoVencimentos))
+  store.set('boletoNomes',JSON.stringify(boletoNomes))
   // sincroniza com Supabase (upsert)
   const row={id:editBoletoId,updated_at:new Date().toISOString()}
   if(n) row.nome=n
@@ -857,8 +864,8 @@ window.lancar=async function(){
   // adiciona ao estado em memória só os do mês atual visível
   novos.forEach(n=>{if(n.mes===mesAtual())gastos.push(n)})
   // persiste TODOS os novos (incluindo parcelas futuras) no localStorage
-  const todosLocal=JSON.parse(localStorage.getItem('gastos_v3')||'[]').filter(g=>!novos.find(n=>n.id===g.id))
-  localStorage.setItem('gastos_v3',JSON.stringify([...todosLocal,...novos]))
+  const todosLocal=JSON.parse(store.get('gastos_v3')||'[]').filter(g=>!novos.find(n=>n.id===g.id))
+  store.set('gastos_v3',JSON.stringify([...todosLocal,...novos]))
   renderAll()
   try{
     const{error}=await sb.from('gastos').insert(novos);if(error)throw error
@@ -1155,32 +1162,35 @@ function renderHist(){
   })
   catChips += '</div>'
   html += catChips
-  txt+=`${'─'.repeat(32)}
-`
-  txt+=`Renda:                  ${fmt(RENDA)}
-`
-  txt+=`Boletos (total):        ${fmt(totalFixo)}
-`
-  txt+=`Boletos pagos:          ${fmt(totalPago)}
-`
-  txt+=`Gasto variável:         ${fmt(totalGasto)}
-`
-  txt+=`Orçamento disponível:   ${fmt(livre)}
-`
-  txt+=`${'─'.repeat(32)}
-`
-  txt+=`Fred gastou:  ${fmt(gFred)}
-`
-  txt+=`Mya gastou:   ${fmt(gMya)}
-`
-  txt+=`${'─'.repeat(32)}
-`
-  txt+=`Por categoria:
-`
+}
+
+window.setFiltro=f=>{histFiltro=f;renderHist()}
+window.setCatFiltro=function(id){histCatFiltro=id;renderHist()}
+
+window.exportarResumo=function(){
+  const tb=todosBoletos()
+  const totalFixo=tb.reduce((a,b)=>a+b.valor,0)
+  const totalPago=tb.filter(b=>boletosPagos.includes(b.id)).reduce((a,b)=>a+b.valor,0)
+  const totalGasto=gastos.reduce((a,b)=>a+b.valor,0)
+  const livre=RENDA-totalFixo
+  const gFred=gastos.filter(x=>x.pessoa==='fred').reduce((a,b)=>a+b.valor,0)
+  const gMya=gastos.filter(x=>x.pessoa==='mya').reduce((a,b)=>a+b.valor,0)
+  const sep='─'.repeat(32)
+  let txt='💸 GASTEI! — Resumo '+mesLabel()+'\n'
+  txt+=sep+'\n'
+  txt+='Renda:                  '+fmt(RENDA)+'\n'
+  txt+='Boletos (total):        '+fmt(totalFixo)+'\n'
+  txt+='Boletos pagos:          '+fmt(totalPago)+'\n'
+  txt+='Gasto variável:         '+fmt(totalGasto)+'\n'
+  txt+='Orçamento disponível:   '+fmt(livre)+'\n'
+  txt+=sep+'\n'
+  txt+='Fred gastou:  '+fmt(gFred)+'\n'
+  txt+='Mya gastou:   '+fmt(gMya)+'\n'
+  txt+=sep+'\n'
+  txt+='Por categoria:\n'
   CATS.forEach(c=>{
     const g=gastos.filter(x=>x.cat===c.id).reduce((a,b)=>a+b.valor,0)
-    if(g>0) txt+=`  ${c.label.padEnd(18)} ${fmt(g)}
-`
+    if(g>0) txt+='  '+c.label.padEnd(18)+' '+fmt(g)+'\n'
   })
   if(navigator.clipboard){
     navigator.clipboard.writeText(txt).then(()=>toast('📋 Resumo copiado!'))
@@ -1214,10 +1224,10 @@ function iniciarRealtime(){
 async function init(){
   initSB()
   document.getElementById('mes-label').textContent=mesLabel()
-  gruposCollapsed=JSON.parse(localStorage.getItem('gruposCollapsed')||'{}')
+  gruposCollapsed=JSON.parse(store.get('gruposCollapsed')||'{}')
   // boletoValores, boletoVencimentos, boletoNomes, boletosExtras
   // são carregados do Supabase em carregarBoletoConfig() / carregarBoletosExtras()
-  ocultarValores=localStorage.getItem('gastei_ocultar')==='1'
+  ocultarValores=store.get('gastei_ocultar')==='1'
   const eyeBtn=document.getElementById('eye-btn')
   const eyeIco=document.getElementById('eye-icon')
   if(eyeBtn) eyeBtn.classList.toggle('oculto',ocultarValores)
@@ -1228,7 +1238,7 @@ async function init(){
   }catch(e){console.warn('Erro no carregamento inicial:',e)}
   atualizarTotaisLogin()
   iniciarRealtime()
-  const u=localStorage.getItem('gastei_usuario')
+  const u=store.get('gastei_usuario')
   if(u){usuario=u;document.getElementById('tela-login').classList.add('hide');atualizarChip();renderAll()}
   hideLoading()
 }
