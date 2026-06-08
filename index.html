@@ -220,6 +220,15 @@
     /* Export btn */
     .export-btn{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rs);padding:7px 12px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;margin-bottom:12px;width:100%}
     .export-btn:active{background:var(--border)}
+    /* Busca histórico */
+    .hist-search{width:100%;font-size:14px;border:1px solid var(--border);border-radius:var(--rs);background:var(--bg);color:var(--text);padding:9px 12px 9px 36px;outline:none;margin-bottom:10px}
+    .hist-search:focus{border-color:var(--fred)}
+    .hist-search-wrap{position:relative;margin-bottom:2px}
+    .hist-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:15px;pointer-events:none}
+    /* Comparativo */
+    .comp-up{color:#1D9E75;font-size:10px;font-weight:500}
+    .comp-down{color:#E24B4A;font-size:10px;font-weight:500}
+    .comp-eq{color:var(--text2);font-size:10px}
     /* Modo config boletos */
     .config-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--fred-l);border-radius:var(--r);margin-bottom:10px;border:0.5px solid var(--fred)}
     .config-bar-txt{font-size:13px;font-weight:600;color:var(--fred-d)}
@@ -415,6 +424,8 @@ let editBoletoId=null
 let editGastoId=null
 let editGastoInline=null  // id do gasto sendo editado inline no histórico
 let histCatFiltro='todas'
+let histBusca=''
+let gastosAnterior=[]  // cache do mês anterior para comparativo
 let isOnline=navigator.onLine
 let modoConfigBoletos=false
 let mostrarFormNovoBoleto=false
@@ -532,6 +543,18 @@ function atualizarTotaisLogin(){
 }
 
 // ── SUPABASE ───────────────────────────────────────
+async function carregarGastosAnterior(){
+  if(!sb) return
+  const [ano,mes]=calcMes(mesOffset-1).split('-').map(Number)
+  const mesAnt=calcMes(mesOffset-1)
+  try{
+    const{data}=await sb.from('gastos').select('cat,valor,pessoa').eq('mes',mesAnt)
+    gastosAnterior=data||[]
+  }catch{
+    gastosAnterior=JSON.parse(store.get('gastos_v3')||'[]').filter(g=>g.mes===mesAnt)
+  }
+}
+
 async function carregarGastos(){
   if(!sb){return}
   try{
@@ -985,10 +1008,13 @@ function renderControle(){
     const tCls=pct>50?'tag-ov':pct>25?'tag-warn':'tag-ok'
     const tTxt=pct>50?'Estourou':pct>25?'Atenção':'Ok'
     const sub=(gF>0||gM>0)?`<span style="font-size:10px;color:var(--text2)">${gF>0?'F:'+fmtV(gF):''}${gF>0&&gM>0?' · ':''}${gM>0?'M:'+fmtV(gM):''}</span>`:''
+    const gtAnt=gastosAnterior.filter(x=>x.cat===c.id).reduce((a,b)=>a+b.valor,0)
+    let compHtml=''
+    if(gtAnt>0&&gt>0){const diff=gt-gtAnt;const pd=Math.round(Math.abs(diff)/gtAnt*100);compHtml=diff>0?'<span class="comp-down">▲'+pd+'%</span>':diff<0?'<span class="comp-up">▼'+pd+'%</span>':''}
     html+=`<div class="prog">
       <div class="prog-top">
         <span class="prog-name"><i class="${c.icon}" style="font-size:13px;color:${c.color}" aria-hidden="true"></i>${c.label} ${sub}</span>
-        <span class="prog-right"><span class="prog-vals">${fmtV(gt)} (${pct}%)</span><span class="tag ${tCls}">${tTxt}</span></span>
+        <span class="prog-right" style="display:flex;align-items:center;gap:5px">${compHtml}<span class="prog-vals">${fmtV(gt)} (${pct}%)</span><span class="tag ${tCls}">${tTxt}</span></span>
       </div>
       <div class="bar"><div class="bf ${bCls}" style="width:${pct}%"></div></div>
     </div>`
@@ -1138,33 +1164,92 @@ function renderFixos(){
 // ── HISTÓRICO ──────────────────────────────────────
 function renderHist(){
   const el=document.getElementById('page-historico');if(!el)return
-  // aplica filtros pessoa + categoria
   let filtrados=histFiltro==='todos'?gastos:gastos.filter(x=>x.pessoa===histFiltro)
   if(histCatFiltro!=='todas') filtrados=filtrados.filter(x=>x.cat===histCatFiltro)
+  if(histBusca){
+    const q=histBusca.toLowerCase()
+    filtrados=filtrados.filter(x=>{
+      const c=CATS.find(c=>c.id===x.cat)
+      return (c&&c.label.toLowerCase().includes(q))
+        ||(x.obs&&x.obs.toLowerCase().includes(q))
+        ||String(x.valor).includes(q)
+    })
+  }
   const sorted=[...filtrados].reverse()
-
-  // botão exportar
-  let html=`<button class="export-btn" onclick="exportarResumo()">
-    <i class="ti ti-download" aria-hidden="true"></i> Exportar resumo do mês (copiar texto)
-  </button>`
-  // chips de pessoa
-  html+=`<div class="filter-row">
-    <button class="fchip ${histFiltro==='todos'?'on':''}" onclick="setFiltro('todos')">Todos</button>
-    <button class="fchip ${histFiltro==='fred'?'on':''}" onclick="setFiltro('fred')">Fred</button>
-    <button class="fchip ${histFiltro==='mya'?'on':''}" onclick="setFiltro('mya')">Mya</button>
-  </div>`
-  // chips de categoria (scroll horizontal)
-  let catChips = '<div class="hist-cats">'
-  catChips += '<button class="fchip '+(histCatFiltro==='todas'?'on':'')+'" onclick="setCatFiltro(\'todas\')">Todas</button>'
+  let html='<button class="export-btn" onclick="exportarResumo()">'
+  html+='<i class="ti ti-download" aria-hidden="true"></i> Exportar resumo do mês</button>'
+  html+='<div class="hist-search-wrap">'
+  html+='<i class="ti ti-search hist-search-icon" aria-hidden="true"></i>'
+  html+='<input class="hist-search" type="text" placeholder="Buscar categoria, valor ou observação…" '
+  html+='value="'+histBusca.replace(/"/g,'&quot;')+'" oninput="histBusca=this.value;renderHist()" /></div>'
+  html+='<div class="filter-row">'
+  html+='<button class="fchip '+(histFiltro==='todos'?'on':'')+'" data-id="todos" onclick="setFiltro(this.dataset.id)">Todos</button>'
+  html+='<button class="fchip '+(histFiltro==='fred'?'on':'')+'" data-id="fred" onclick="setFiltro(this.dataset.id)">Fred</button>'
+  html+='<button class="fchip '+(histFiltro==='mya'?'on':'')+'" data-id="mya" onclick="setFiltro(this.dataset.id)">Mya</button>'
+  html+='</div>'
+  let catChips='<div class="hist-cats">'
+  catChips+='<button class="fchip '+(histCatFiltro==='todas'?'on':'')+'" onclick="setCatFiltro(this.dataset.id)" data-id="todas">Todas</button>'
   CATS.forEach(c=>{
-    catChips += '<button class="fchip '+(histCatFiltro===c.id?'on':'')+'" onclick="setCatFiltro(this.dataset.id)" data-id="'+c.id+'" style="white-space:nowrap">'
-    catChips += '<i class="'+c.icon+'" style="font-size:11px;color:'+c.color+'"></i> '+c.label+'</button>'
+    catChips+='<button class="fchip '+(histCatFiltro===c.id?'on':'')+'" onclick="setCatFiltro(this.dataset.id)" data-id="'+c.id+'" style="white-space:nowrap">'
+    catChips+='<i class="'+c.icon+'" style="font-size:11px;color:'+c.color+'"></i> '+c.label+'</button>'
   })
-  catChips += '</div>'
-  html += catChips
+  catChips+='</div>'
+  html+=catChips
+  if(!sorted.length){
+    html+='<div class="card"><p class="empty"><i class="ti ti-receipt-off" style="font-size:26px;display:block;margin-bottom:8px"></i>'
+    html+=(histBusca?'Nenhum resultado para "'+histBusca+'"':'Nenhum lançamento ainda')+'</p></div>'
+    el.innerHTML=html;return
+  }
+  const totalF=filtrados.reduce((a,b)=>a+b.valor,0)
+  html+='<div class="metric-grid">'
+  html+='<div class="metric"><div class="metric-l">'+sorted.length+' lançamento'+(sorted.length!==1?'s':'')+'</div><div class="metric-v">'+fmtV(totalF)+'</div></div>'
+  html+='<div class="metric"><div class="metric-l">Média por gasto</div><div class="metric-v">'+fmtV(sorted.length?totalF/sorted.length:0)+'</div></div>'
+  html+='</div><div class="card">'
+  sorted.forEach(g=>{
+    const c=CATS.find(x=>x.id===g.cat)||{icon:'ti ti-dots',label:'Outros',color:'#888'}
+    const isFred=g.pessoa==='fred'
+    const isRegistro=g.tipo==='cartao_registro'
+    const isFatura=g.tipo==='cartao_fatura'
+    const isEditing=editGastoInline===g.id
+    const gid=g.id
+    const editColor=isEditing?'var(--fred)':'var(--text2)'
+    const badgeCartao=isRegistro?'<span class="badge badge-p"><i class="ti ti-credit-card" style="font-size:9px"></i> Cartão</span>':''
+    const badgeFatura=isFatura?'<span class="badge" style="background:#F0ECF9;color:#5B3FA6"><i class="ti ti-receipt" style="font-size:9px"></i> Fatura</span>':''
+    const obsText=g.obs?' · '+g.obs:''
+    let row='<div class="lanc-row" style="'+(isEditing?'flex-direction:column;align-items:stretch;gap:8px;':'')+'">'
+    row+='<div style="display:flex;justify-content:space-between;align-items:center">'
+    row+='<div style="display:flex;align-items:center;gap:8px">'
+    row+='<i class="'+c.icon+'" style="font-size:15px;color:'+c.color+'"></i><div>'
+    row+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;flex-wrap:wrap">'
+    row+='<span style="font-size:12px;font-weight:500">'+c.label+'</span>'
+    row+='<span class="badge '+(isFred?'badge-f':'badge-m')+'">'+(isFred?'Fred':'Mya')+'</span>'
+    row+=badgeCartao+badgeFatura
+    row+='</div><div style="font-size:10px;color:var(--text2)">'+g.data+obsText+'</div></div></div>'
+    row+='<div style="display:flex;align-items:center;gap:6px">'
+    row+='<span style="font-size:13px;font-weight:600;color:var(--err)">- '+fmtV(g.valor)+'</span>'
+    row+='<button class="del-btn" onclick="abrirEditarGasto(this.dataset.id)" data-id="'+gid+'" style="color:'+editColor+'"><i class="ti ti-pencil"></i></button>'
+    row+='<button class="del-btn" onclick="deletarGasto(this.dataset.id)" data-id="'+gid+'"><i class="ti ti-trash"></i></button>'
+    row+='</div></div>'
+    if(isEditing){
+      const obsAtual=(g.obs||'').replace(/"/g,'&quot;')
+      row+='<div style="display:flex;flex-direction:column;gap:8px;padding:10px 0 4px;border-top:0.5px solid var(--border)">'
+      row+='<div style="display:flex;gap:8px">'
+      row+='<div style="flex:1"><div class="modal-field-label" style="margin-bottom:4px">Valor (R$)</div>'
+      row+='<input class="obs-input" type="number" id="eg-valor-'+gid+'" value="'+g.valor+'" inputmode="decimal" step="0.01" style="width:100%"/></div>'
+      row+='<div style="flex:2"><div class="modal-field-label" style="margin-bottom:4px">Observação</div>'
+      row+='<input class="obs-input" type="text" id="eg-obs-'+gid+'" value="'+obsAtual+'" placeholder="opcional" style="width:100%"/></div></div>'
+      row+='<div style="display:flex;gap:8px">'
+      row+='<button class="modal-btn cancel" style="flex:1;padding:9px" onclick="fecharEditarGasto()">Cancelar</button>'
+      row+='<button class="modal-btn confirm" style="flex:2;padding:9px" onclick="salvarEdicaoGasto(this.dataset.id)" data-id="'+gid+'">Salvar</button>'
+      row+='</div></div>'
+    }
+    row+='</div>'
+    html+=row
+  })
+  html+='</div>'
+  el.innerHTML=html
 }
-
-window.setFiltro=f=>{histFiltro=f;renderHist()}
+window.setFiltro=function(f){histFiltro=f;renderHist()}
 window.setCatFiltro=function(id){histCatFiltro=id;renderHist()}
 
 window.exportarResumo=function(){
@@ -1205,7 +1290,7 @@ window.exportarResumo=function(){
 // ── RENDER GERAL ───────────────────────────────────
 function renderAll(){renderHome();renderControle();renderFixos();renderHist()}
 async function recarregarDados(){
-  await Promise.all([carregarGastos(),carregarBoletos(),carregarBoletoConfig(),carregarBoletosExtras()])
+  await Promise.all([carregarGastos(),carregarGastosAnterior(),carregarBoletos(),carregarBoletoConfig(),carregarBoletosExtras()])
   atualizarTotaisLogin()
   renderAll()
 }
@@ -1234,7 +1319,7 @@ async function init(){
   if(eyeIco) eyeIco.className=ocultarValores?'ti ti-eye-off':'ti ti-eye'
   await resetBoletosPagosSeNovoMes()
   try{
-    await Promise.all([carregarGastos(),carregarBoletos(),carregarBoletoConfig(),carregarBoletosExtras()])
+    await Promise.all([carregarGastos(),carregarGastosAnterior(),carregarBoletos(),carregarBoletoConfig(),carregarBoletosExtras()])
   }catch(e){console.warn('Erro no carregamento inicial:',e)}
   atualizarTotaisLogin()
   iniciarRealtime()
